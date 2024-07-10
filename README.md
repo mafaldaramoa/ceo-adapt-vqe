@@ -37,7 +37,7 @@ All example scripts use the $H_2$ molecule as the simplest example. All other mo
 
 ## Simulation Time
 
-For larger molecules, such as $H_6$, simulations might take several hours to complete. To speed up simulations, you may create an eigendecomposition of the pool (see method `create_eig_decomp` in submodule `pools` and method `load` in `algorithms.adapt_vqe`). While the eigendecomposition itself takes hours to compute, once it is created it can be used for the simulation of any system with the same number of qubits (with the same pool).
+For larger molecules, such as $H_6$, simulations might take several hours to complete. To speed up simulations, you may create an eigendecomposition of the pool (see method `create_eig_decomp()` in submodule `pools` and method `load()` in `algorithms.adapt_vqe`). While the eigendecomposition itself takes hours to compute, once it is created it can be used for the simulation of any system with the same number of qubits (with the same pool).
 
 ## Supported Variants
 
