@@ -5,18 +5,20 @@ This repository contains code to simulate a wide array of variants of the Adapti
 * [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines]()
 * [Reducing measurement costs by recycling the Hessian in adaptive variational quantum algorithms](https://arxiv.org/abs/2401.05172)
 
-##
+## Installation Requirements
 
-You must install the following packages in the listed versions:
+You can install the required packages as follows:
 
 ```
-qiskit[visualization]==0.43.3
-pyscf==2.2.0
-openfermion==1.5.0
-openfermionpyscf
-openfermion==1.5.1
-scipy==1.10.1
+pip install qiskit[visualization]==0.43.3
+pip install pyscf==2.2.0
+pip install openfermion==1.5.0
+pip install openfermionpyscf
+pip install openfermion==1.5.1
+pip install scipy==1.10.1
 ```
+
+Creating a clean virtual environment using Anaconda is recommended. Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
 
 ## Running Simulations
 
