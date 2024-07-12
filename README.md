@@ -31,7 +31,7 @@ sys.path.append("/path/to/repo")
 
 If done this way, the change is temporary. A permanent change is achieved via modification of `PYTHONPATH`.
 
-* Test Systems
+## Test Systems
 
 All example scripts use the $H_2$ molecule as the simplest example. All other molecules featured in the papers can be created similarly (see submodule `molecules`). 
 
