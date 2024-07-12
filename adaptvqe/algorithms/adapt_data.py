@@ -9,6 +9,7 @@ import numpy as np
 from copy import deepcopy
 from qiskit import QuantumCircuit
 from adaptvqe.circuits import cnot_depth, cnot_count
+from adaptvqe.op_conv import get_qasm
 
 
 class AnsatzData:
@@ -215,17 +216,18 @@ class AdaptData:
                  pool,
                  sparse_ref_state,
                  file_name,
-                 fci_energy):
+                 fci_energy,
+                 n):
         '''
         Initialize class instance
 
         Arguments:
           initial_energy (float): energy of the reference state
           pool (list): operator pool
-          reference_determinant (list): the Slater determinant to be used as reference,
-            in big endian ordering (|abcd> <-> [a,b,c,d]; [qubit 0, qubit 1,...])
-          previous_data (AdaptData): data from a previous run, to be used as a
-            starting point
+          sparse_ref_state (csc_matrix): the state to be used as the reference state (e.g. Hartree-Fock)
+          file_name (str): a string describing the ADAPT implementation type and molecule
+          fci_energy (float): the exact ground energy
+          n (int): the size of the system
         '''
 
         self.pool_name = pool.name
@@ -241,6 +243,7 @@ class AdaptData:
         self.file_name = file_name
         self.iteration_counter = 0
         self.fci_energy = fci_energy
+        self.n = n
 
         self.closed = False
         self.success = False
@@ -389,7 +392,8 @@ class AdaptData:
 
             new_circuit = pool.get_circuit(new_indices, new_coefficients)
             circuit = circuit.compose(new_circuit)
-            depth = cnot_depth(circuit.qasm())
+            qasm_circuit = get_qasm(circuit)
+            depth = cnot_depth(qasm_circuit,self.n)
             acc_depths.append(depth)
 
         return acc_depths
@@ -413,7 +417,8 @@ class AdaptData:
                 new_coefficients = [np.random.rand() for _ in coefficients]
 
             new_circuit = pool.get_circuit(new_indices, new_coefficients)
-            count += cnot_count(new_circuit.qasm())
+            qasm_circuit = get_qasm(new_circuit)
+            count += cnot_count(qasm_circuit)
             acc_counts.append(count)
 
         return acc_counts

@@ -13,11 +13,38 @@ from openfermion import (count_qubits,
                          get_fermion_operator,
                          InteractionOperator,
                          jordan_wigner)
+import qiskit
+from qiskit.qasm3 import dumps
 
-from qiskit.opflow import I, Z, X, Y
+# todo: use stable version of qiskit only
+if int(qiskit.__version__[0]) >= 1:
+    # opflow has been deprecated
+    from qiskit.quantum_info import Pauli
+    I = Pauli("I")
+    X = Pauli("X")
+    Y = Pauli("Y")
+    Z = Pauli("Z")
+else:
+    from qiskit.opflow import I, Z, X, Y
 
 from adaptvqe.matrix_tools import string_to_matrix
 
+def get_qasm(qc):
+    """
+    Converts a Qiskit QuantumCircuit to qasm.
+    Args:
+        qc (QuantumCircuit): a Qiskit QuantumCircuit
+
+    Returns:
+        qasm (str): the QASM string for this circuit
+    """
+
+    if int(qiskit.__version__[0]) >= 1:
+        qasm = dumps(qc)
+    else:
+        qasm = qc.qasm()
+
+    return qasm
 
 def endian_conv(index, n):
     """

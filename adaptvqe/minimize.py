@@ -124,7 +124,7 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
     else:
         # Function value at initial point has been provided. No costs
         old_fval = f0
-        sf.nfev -= 1
+        nfev_correction = -1
 
     if g0 is None:
         # Calculate vector at initial point
@@ -133,7 +133,7 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
         # Gradient vector at initial point has been provided. No costs
         assert len(g0) == len(x0)
         gfk = g0
-        sf.ngev -= 1
+        ngev_correction = -1
 
     k = 0
     N = len(x0)
@@ -244,8 +244,8 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
         print("         Function evaluations: %d" % sf.nfev)
         print("         Gradient evaluations: %d" % sf.ngev)
 
-    result = OptimizeResult(fun=fval, jac=gfk, hess_inv=Hk, nfev=sf.nfev,
-                            njev=sf.ngev, status=warnflag,
+    result = OptimizeResult(fun=fval, jac=gfk, hess_inv=Hk, nfev=sf.nfev + nfev_correction,
+                            njev=sf.ngev + ngev_correction, status=warnflag,
                             success=(warnflag == 0), message=msg, x=xk,
                             nit=k)
     if retall:

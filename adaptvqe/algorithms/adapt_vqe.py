@@ -1046,7 +1046,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                                   self.pool,
                                   self.sparse_ref_state,
                                   self.file_name,
-                                  self.exact_energy)
+                                  self.exact_energy,
+                                  self.n)
 
             self.indices = []
             self.coefficients = []

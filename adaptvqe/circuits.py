@@ -8,28 +8,34 @@ from qiskit.circuit.library import RYGate
 from adaptvqe.op_conv import convert_hamiltonian, read_of_qubit_operator
 
 
-def cnot_depth(qasm):
+def cnot_depth(qasm, n):
     """
-    Counts the depth of a circuit represented by a QASM string, considering only cx gates.
+    Counts the depth of a circuit on n qubits represented by a QASM string, considering only cx gates.
     Circuit must be decomposed into a cx + single qubit rotations gate set.
-    """
 
-    n = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qasm.splitlines()[2]).group())
+    Aguments:
+        qasm (str): the QASM representation of the circuit
+        n (int): the number of qubits
+    Returns:
+        The CNOT depth of the circuit
+    """
+    #n = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qasm.splitlines()[2]).group())
     depths = [0 for _ in range(n)]
 
     for line in qasm.splitlines()[3:]:
         # Remove ;
         line = line[:-1]
 
-        op, qubits = line.split(" ")
+        # Split line by spaces
+        line_elems = line.split(" ")
 
+        # First element is operation type
+        op = line_elems[0]
         if op[:2] != "cx":
             continue
 
-        qubits = qubits.split(",")
-        for i, qubit in enumerate(qubits):
-            # Get qubit indices as list
-            qubits[i] = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qubit).group())
+        # Next elements are qubits
+        qubits = [int(re.search(r"[0-9]+",qubit_string).group()) for qubit_string in line_elems[1:]]
 
         max_depth = max([depths[qubit] for qubit in qubits])
         new_depth = max_depth + 1
@@ -49,8 +55,8 @@ def cnot_count(qasm):
     for line in qasm.splitlines()[3:]:
         # Remove ;
         line = line[:-1]
-
-        op, qubits = line.split(" ")
+        line_elems = line.split(" ")
+        op = line_elems[0]
 
         if op[:2] == "cx":
             count += 1
