@@ -10,15 +10,26 @@ This repository contains code to simulate a wide array of variants of the Adapti
 You can install the required packages as follows:
 
 ```
-pip install qiskit[visualization]==0.43.3
-pip install pyscf==2.2.0
-pip install openfermion==1.5.0
+pip install qiskit[visualization]
+pip install pyscf
+pip install openfermion
 pip install openfermionpyscf
-pip install openfermion==1.5.1
-pip install scipy==1.10.1
+pip install scipy
 ```
 
 Creating a clean virtual environment using Anaconda is recommended. Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
+
+The results in the papers were obtained with the following package versions:
+
+```
+qiskit: version 0.43.3
+pyscf: version 2.2.0
+openfermion: version 1.5.1
+openfermionpyscf: version 0.5
+scipy: version 1.10.1
+```
+
+While I tried to make the code forward-compatible, I cannot guarantee proper functioning with other versions.
 
 ## Running Simulations
 
