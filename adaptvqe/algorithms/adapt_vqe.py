@@ -386,11 +386,11 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             gradient = self.eval_candidate_gradient(index, coefficients, indices)
             gradient = self.penalize_gradient(gradient, index, silent)
 
+            # Find the index of the operator in the ordered gradient list
+            sel_gradients, sel_indices = self.place_gradient(gradient, index, sel_gradients, sel_indices)
+
             if index not in self.pool.parent_range:
                 total_norm += gradient ** 2
-
-                # Find the index of the operator in the ordered gradient list
-                sel_gradients, sel_indices = self.place_gradient(gradient, index, sel_gradients, sel_indices)
 
         total_norm = np.sqrt(total_norm)
         max_norm = sel_gradients[0]
@@ -1743,7 +1743,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             candidates = [index, viable_parents]
             candidate_gradients = [gradient, parent_gradients]
             if len(viable_parents) > 1:
-                print(f"\nTesting OVP-CEO {index} and separately  MVP-CEO formed from {viable_parents}")
+                print(f"\nTesting OVP-CEO {index} and separately MVP-CEO formed from {viable_parents}")
             else:
                 print(f"\nOnly one QE with nonzero gradients. Will add QE {index}.")
                 candidates = [index]
