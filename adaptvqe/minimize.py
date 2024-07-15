@@ -116,7 +116,8 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
 
     f = sf.fun
     myfprime = sf.grad
-
+    ngev_correction = 0
+    nfev_correction = 0
     # print("f0",f0)
     if f0 is None:
         # Calculate function at initial point
@@ -124,7 +125,7 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
     else:
         # Function value at initial point has been provided. No costs
         old_fval = f0
-        nfev_correction = -1
+        nfev_correction -= 1
 
     if g0 is None:
         # Calculate vector at initial point
@@ -133,7 +134,7 @@ def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
         # Gradient vector at initial point has been provided. No costs
         assert len(g0) == len(x0)
         gfk = g0
-        ngev_correction = -1
+        ngev_correction -= 1
 
     k = 0
     N = len(x0)
