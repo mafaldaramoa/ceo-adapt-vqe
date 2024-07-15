@@ -506,7 +506,18 @@ class OperatorPool(metaclass=abc.ABCMeta):
     def get_cnots(self, index):
         """
         Obtain number of CNOTs required in the circuit implementation of the operator labeled by index.
+        If index is a list, it must represent a MVP-CEO.
         """
+
+        if isinstance(index,list):
+
+            # Make sure all operators are qubit excitations acting on the same qubits. If they are, the number of CNOTs
+            #required in the circuit implementation is the same regardless of the number of operators
+            op_qubits = [self.get_qubits(i) for i in index]
+            assert all(qubits == op_qubits[0] for qubits in op_qubits)
+            assert all([i in self.parent_range for i in index])
+            index = index[0]
+
         return self.operators[index].cnots
 
     def get_cnot_depth(self, index):
