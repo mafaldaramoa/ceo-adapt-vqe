@@ -22,14 +22,14 @@ Creating a clean virtual environment using Anaconda is recommended. Note that Py
 The results in the papers were obtained with the following package versions:
 
 ```
-qiskit: version 0.43.3
-pyscf: version 2.2.0
-openfermion: version 1.5.1
-openfermionpyscf: version 0.5
-scipy: version 1.10.1
+qiskit 0.43.3
+pyscf 2.2.0
+openfermion 1.5.1
+openfermionpyscf 0.5
+scipy 1.10.1
 ```
 
-While I tried to make the code forward-compatible, I cannot guarantee proper functioning with other versions.
+While I tried to make the code compatible with more recent releases, I cannot guarantee proper functioning or identical results with versions other than those specified.
 
 ## Running Simulations
 
