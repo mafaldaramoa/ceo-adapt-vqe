@@ -386,6 +386,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             gradient = self.eval_candidate_gradient(index, coefficients, indices)
             gradient = self.penalize_gradient(gradient, index, silent)
 
+            if np.abs(gradient) < 10**-8:
+                continue
+
             # Find the index of the operator in the ordered gradient list
             sel_gradients, sel_indices = self.place_gradient(gradient, index, sel_gradients, sel_indices)
 

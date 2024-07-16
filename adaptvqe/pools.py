@@ -1635,7 +1635,7 @@ class QE1(GSD):
     efficient as it avoids implementing the GSD to begin with.
     """
 
-    name = "qe"
+    name = "QE"
 
     def create_operators(self):
         """
@@ -1698,7 +1698,7 @@ class QE(OperatorPool):
     combinations of indices we know are associated with valid excitations. This is more efficient than QE1.
     """
 
-    name = "qe"
+    name = "QE"
 
     def __init__(self,
                  molecule=None,
@@ -1925,7 +1925,7 @@ class QE_All(QE):
     Same as QE, but here we consider excitations between any 2 orbital pairs (not Sz preserving necessarily).
     """
 
-    name = "qe_all"
+    name = "QE_ALL"
 
     def create_singles(self):
         """
@@ -2401,6 +2401,49 @@ class MVP_CEO(QE):
                          n=n,
                          source_ops=source_ops)
 
+    def get_circuit(self, indices, coefficients):
+        """
+        Returns the circuit corresponding to the ansatz defined by the arguments.
+        Function for MVP-CEO pool specifically.
+        """
+        circuit = QuantumCircuit(self.n)
+        acc_indices = []
+        acc_cs = []
+
+        for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
+
+            acc_indices.append(index)
+            acc_cs.append(coefficient)
+
+            if (i + 1 < len(indices) and
+                    self.get_qubits(indices[i + 1]) == self.get_qubits(index)):
+                # Wait until you have all QEs with same support to implement
+                # the MVP-CEO circuit
+                qc = None
+
+            elif len(acc_indices) == 1:
+                # Implement as QE (single or double)
+                operator = self.operators[index]
+                source_orbs = operator.source_orbs
+                target_orbs = operator.target_orbs
+                qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=True)
+                acc_indices = []
+                acc_cs = []
+
+            else:
+                # Implement as MVP-CEO
+                q_op = QubitOperator()
+                for ix, c in zip(acc_indices, acc_cs):
+                    q_op = q_op + c * self.operators[ix].q_operator
+                qc = mvp_ceo_circuit(q_op, self.n, big_endian=True)
+                acc_indices = []
+                acc_cs = []
+
+            if qc is not None:
+                circuit = circuit.compose(qc)
+                circuit.barrier()
+
+        return circuit
 
 class FullPauliPool(PauliPool):
     """
@@ -2446,7 +2489,7 @@ class TiledQEPool(QE):
     It works well for systems with translational symmetry; see ArXiv:2206.14215
     """
 
-    name = "tiled_qe_pool"
+    name = "tiled_QE_pool"
 
     def create_operators(self):
 
