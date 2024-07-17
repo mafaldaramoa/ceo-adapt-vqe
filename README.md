@@ -2,7 +2,7 @@
 
 This repository contains code to simulate a wide array of variants of the Adaptive Derivative-Assembled Problem-Tailored (ADAPT) - Variational Quantum Eigensolver (VQE). In particular, this code was used in the following papers:
 
-* [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines]()
+* [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines](https://arxiv.org/abs/2407.08696)
 * [Reducing measurement costs by recycling the Hessian in adaptive variational quantum algorithms](https://arxiv.org/abs/2401.05172)
 
 ## Installation Requirements
@@ -58,7 +58,7 @@ A variety of pool options are also supported, namely all CEO variants (OVP, MVP,
 
 ## References
 
-[1] [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines]()
+[1] [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines](https://arxiv.org/abs/2407.08696)
 
 [2] [Reducing measurement costs by recycling the Hessian in adaptive variational quantum algorithms](https://arxiv.org/abs/2401.05172)
 
