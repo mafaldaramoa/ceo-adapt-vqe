@@ -396,7 +396,12 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 total_norm += gradient ** 2
 
         total_norm = np.sqrt(total_norm)
-        max_norm = sel_gradients[0]
+
+        if sel_gradients:
+            max_norm = sel_gradients[0]
+        else:
+            # All operators have negligeable gradients
+            max_norm = 0
 
         print("Total gradient norm: {}".format(total_norm))
 
@@ -2099,7 +2104,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             # Second case: we're not recycling orbital parameters, so we must recalculate gradients
             g0 = self.estimate_gradients(initial_coefficients, indices)
             extra_njev = 1
-
+        print("Here2",g0)
         # Perform optimization
         opt_result = minimize_bfgs(e_fun,
                                    initial_coefficients,
@@ -2157,15 +2162,17 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             initial_coefficients = deepcopy(self.coefficients)
         if indices is None:
             indices = self.indices.copy()
-        if initial_inv_hessian is None:
-            initial_inv_hessian = self.inv_hessian
-        if g0 is None and self.recycle_hessian:
-            g0 = self.gradients
-        if e0 is None and self.recycle_hessian:
-            e0 = self.energy
+        if initial_coefficients is None and indices is None:
+            # Use current Hessian, gradient and energy for the starting point
+            if initial_inv_hessian is None:
+                initial_inv_hessian = self.inv_hessian
+            if g0 is None and self.recycle_hessian:
+                g0 = self.gradients
+            if e0 is None and self.recycle_hessian:
+                e0 = self.energy
         if maxiters is None:
             maxiters = self.max_opt_iter
-
+        print("Here",g0)
         initial_coefficients = np.append([0 for _ in range(self.orb_opt_dim)], initial_coefficients)
 
         return initial_coefficients, indices, initial_inv_hessian, g0, e0, maxiters
