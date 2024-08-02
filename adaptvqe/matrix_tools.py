@@ -9,6 +9,7 @@ import numpy as np
 import scipy
 
 from scipy.sparse.linalg import expm_multiply
+from scipy.sparse import csc_matrix
 
 # Pauli operators (two-dimensional) as matrices
 pauliX = np.array([[0, 1],
@@ -22,7 +23,7 @@ pauliY = np.array([[0, -1j],
                   dtype=complex)
 
 
-def index_to_ket(index, dimension):
+def index_to_ket(index, dimension, little_endian=False):
     """
     Transforms a computational basis statevector described by the index of its
     nonzero entry into the corresponding ket.
@@ -31,6 +32,7 @@ def index_to_ket(index, dimension):
         index (int): the index of the non-zero element of the computational
           basis state.
         dimension (int): the dimension of the Hilbert space
+        little_endian (bool): whether to output the ket using little endian notation
 
     Returns:
         ket (list): the corresponding ket as a list of length dimension
@@ -40,16 +42,20 @@ def index_to_ket(index, dimension):
     vector = [0 for _ in range(index)] + [1] + [1 for _ in range(dimension - index - 1)]
     ket = vector_to_ket(vector)
 
+    if little_endian:
+        ket = ket[::-1]
+
     return ket
 
 
-def vector_to_ket(state_vector):
+def vector_to_ket(state_vector, little_endian=False):
     """
     Transforms a vector representing a basis state to the corresponding ket.
 
     Arguments:
         state_vector (np.ndarray): computational basis vector in the 2^n dimensional
           Hilbert space
+        little_endian (bool): whether to output the ket using little endian notation
     Returns:
         ket (list): a list of length n representing the corresponding ket
     """
@@ -78,10 +84,13 @@ def vector_to_ket(state_vector):
 
         dim = dim / 2
 
+    if little_endian:
+        ket = ket[::-1]
+
     return ket
 
 
-def string_to_index(string):
+def string_to_index(string, little_endian=False):
     """
     Turns a string representing a computational basis state into the index of the
     non-null element of the corresponding statevector
@@ -89,9 +98,13 @@ def string_to_index(string):
 
     Arguments:
         string (str): a computational basis state
+        little_endian (bool): whether the input ket is in little endian notation
     Returns:
         (int) The index of the position of "1" in the statevector representing this state in the Z basis
     """
+
+    if little_endian:
+        string = string[::-1]
 
     n = len(string)
     dim = 2 ** n
@@ -111,15 +124,19 @@ def string_to_index(string):
     return int(index)
 
 
-def string_to_matrix(pauli_string):
+def string_to_matrix(pauli_string,little_endian=False):
     """
     Converts a Pauli string to its matrix form.
 
     Arguments:
         pauli_string (str): the Pauli string (e.g. "IXYIZ")
+        little_endian (bool): whether the input ket is in little endian notation
     Returns:
         matrix (np.ndarray): the corresponding matrix, in the computational basis
     """
+
+    if little_endian:
+        pauli_string = pauli_string[::-1]
 
     matrix = np.array([1])
 
@@ -137,17 +154,22 @@ def string_to_matrix(pauli_string):
     return matrix
 
 
-def ket_to_vector(ket):
+def ket_to_vector(ket,little_endian=False):
     """
     Transforms a ket representing a basis state to the corresponding state vector.
 
     Arguments:
-    ket (list): a list of length n representing the ket
+        ket (list): a list of length n representing the ket
+        little_endian (bool): whether the input ket is in little endian notation
 
     Returns:
         state_vector (np.ndarray): the corresponding basis vector in the
             2^n dimensional Hilbert space
     """
+
+    if little_endian:
+        ket = ket[::-1]
+
     state_vector = [1]
 
     # Iterate through the ket, calculating the tensor product of the qubit states
@@ -233,3 +255,36 @@ def create_unitary(coefficients,
         unitary = expm_multiply(operator, unitary)
 
     return unitary
+
+
+def revert_endianness(statevector):
+    """
+    Reverts a statevector assuming the endianness is switched: qubit k is now qubit n-1-k, where n is the total number
+    of qubits of the system.
+
+    Arguments:
+        statevector (csc_matrix): The statevector to be reverted.
+    Returns:
+        csc_matrix: The reverted statevector.
+    """
+
+    new_statevector = csc_matrix((2 ** n, 1), dtype=complex)
+
+    for i, amp in enumerate(statevector):
+        # Write computational basis state corresponding to this entry as string
+        cb_state = bin(int(i))[2:]
+        cb_state = "0" * (n - len(cb_state)) + cb_state
+
+        # Revert endianness
+        new_cb_state = cb_state[::-1]
+
+        # Convert back to decimal
+        new_index = int(new_cb_state, 2)
+
+        # Obtain corresponding computational basis state
+        ket = index_to_ket(i, n)
+
+        # Fill the entry with the value
+        new_statevector[new_index] = amp[0, 0]
+
+    return new_statevector

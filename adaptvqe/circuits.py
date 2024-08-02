@@ -201,7 +201,7 @@ def single_qe_circuit(source_orb, target_orb, theta, n, big_endian=False):
     return qc
 
 
-def pauli_exp_circuit(qubit_operator, n, big_endian=False):
+def pauli_exp_circuit(qubit_operator, n, revert_endianness=False):
     """
     Implements the exponential of an operator, which must be anti-Hermitian.
     If the Paulis commute, the circuit is exact. If they don't, it's an approximation with 1 Trotter step.
@@ -209,7 +209,7 @@ def pauli_exp_circuit(qubit_operator, n, big_endian=False):
     Arguments:
         qubit_operator (QubitOperator): the generator of the unitary (exponent)
         n (int): the number of qubits of the output circuit (must be >= number of qubits qubit_operator acts on)
-        big_endian (bool): if True/False, big/little endian ordering will be assumed
+        revert_endianness (bool): if True/False, big/little endian ordering will be assumed
 
     Returns:
         Circuit implementing e^qubit_operator (approximately if strings in generator do not commute)
@@ -222,7 +222,7 @@ def pauli_exp_circuit(qubit_operator, n, big_endian=False):
 
         coeff = pauli_dict[pauli_string]
 
-        if big_endian:
+        if revert_endianness:
             pauli_string = pauli_string + "I" * (n - len(pauli_string))
             pauli_string = pauli_string[::-1]
 
