@@ -11,7 +11,7 @@ import pickle
 from openfermion import (jordan_wigner,
                          QubitOperator,
                          count_qubits)
-from adaptvqe.op_conv import convert_hamiltonian, string_to_qop
+from .op_conv import convert_hamiltonian, string_to_qop
 
 
 def get_operator_qubits(operator):

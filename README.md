@@ -5,17 +5,15 @@ This repository contains code to simulate a wide array of variants of the Adapti
 * [Reducing the Resources Required by ADAPT-VQE Using Coupled Exchange Operators and Improved Subroutines](https://arxiv.org/abs/2407.08696)
 * [Reducing measurement costs by recycling the Hessian in adaptive variational quantum algorithms](https://arxiv.org/abs/2401.05172)
 
-## Installation Requirements
+## Installation
 
-You can install the required packages as follows:
+You can install `ceo-adapt-vqe` as follows:
 
 ```
-pip install qiskit[visualization]
-pip install pyscf
-pip install openfermion
-pip install openfermionpyscf
-pip install scipy
+pip install .
 ```
+
+This takes care of installing all required packages.
 
 Creating a clean virtual environment using Anaconda is recommended. Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
 
@@ -30,17 +28,6 @@ scipy 1.10.1
 ```
 
 While I tried to make the code compatible with more recent releases, I cannot guarantee proper functioning or identical results with versions other than those specified.
-
-## Running Simulations
-
-Before running the scripts, you must append the repository path to the Python path: 
-
-```
-import sys
-sys.path.append("/path/to/repo")
-```
-
-If done this way, the change is temporary. A permanent change is achieved via modification of `PYTHONPATH`.
 
 ## Test Systems
 
