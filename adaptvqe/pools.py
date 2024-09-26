@@ -27,10 +27,10 @@ from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
-from adaptvqe.circuits import qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count
-from adaptvqe.chemistry import normalize_op
-from adaptvqe.op_conv import string_to_qop
-from adaptvqe.utils import get_operator_qubits, remove_z_string, tile
+from .circuits import qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count
+from .chemistry import normalize_op
+from .op_conv import string_to_qop
+from .utils import get_operator_qubits, remove_z_string, tile
 
 
 class OpType:

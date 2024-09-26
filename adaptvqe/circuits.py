@@ -5,7 +5,7 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import RYGate
 
-from adaptvqe.op_conv import convert_hamiltonian, read_of_qubit_operator
+from .op_conv import convert_hamiltonian, read_of_qubit_operator
 
 
 def cnot_depth(qasm, n):
@@ -19,7 +19,7 @@ def cnot_depth(qasm, n):
     Returns:
         The CNOT depth of the circuit
     """
-    #n = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qasm.splitlines()[2]).group())
+    # n = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qasm.splitlines()[2]).group())
     depths = [0 for _ in range(n)]
 
     for line in qasm.splitlines()[3:]:
@@ -35,7 +35,10 @@ def cnot_depth(qasm, n):
             continue
 
         # Next elements are qubits
-        qubits = [int(re.search(r"[0-9]+",qubit_string).group()) for qubit_string in line_elems[1:]]
+        qubits = [
+            int(re.search(r"[0-9]+", qubit_string).group())
+            for qubit_string in line_elems[1:]
+        ]
 
         max_depth = max([depths[qubit] for qubit in qubits])
         new_depth = max_depth + 1
@@ -66,17 +69,17 @@ def cnot_count(qasm):
 
 def qe_circuit(source_orbs, target_orbs, theta, n, big_endian=False):
     """
-        Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
+    Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
 
-        Arguments:
-            source_orbs (list): the spin-orbitals from which the excitation removes electrons
-            target_orbs (list): the spin-orbitals to which the excitation adds electrons
-            theta (float): the coefficient of the excitation
-            n (int): the number of qubits
-            big_endian (bool): if True/False, big/little endian ordering will be assumed
+    Arguments:
+        source_orbs (list): the spin-orbitals from which the excitation removes electrons
+        target_orbs (list): the spin-orbitals to which the excitation adds electrons
+        theta (float): the coefficient of the excitation
+        n (int): the number of qubits
+        big_endian (bool): if True/False, big/little endian ordering will be assumed
 
-        Returns:
-            QuantumCircuit (the circuit implementing the operator in Qiskit)
+    Returns:
+        QuantumCircuit (the circuit implementing the operator in Qiskit)
     """
 
     if len(source_orbs) == 2:
@@ -87,17 +90,17 @@ def qe_circuit(source_orbs, target_orbs, theta, n, big_endian=False):
 
 def double_qe_circuit(source_orbs, target_orbs, theta, n, big_endian=False):
     """
-        Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
+    Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
 
-        Arguments:
-            source_orbs (list): the spin-orbitals from which the excitation removes electrons
-            target_orbs (list): the spin-orbitals to which the excitation adds electrons
-            theta (float): the coefficient of the excitation
-            n (int): the number of qubits
-            big_endian (bool): if True/False, big/little endian ordering will be assumed
+    Arguments:
+        source_orbs (list): the spin-orbitals from which the excitation removes electrons
+        target_orbs (list): the spin-orbitals to which the excitation adds electrons
+        theta (float): the coefficient of the excitation
+        n (int): the number of qubits
+        big_endian (bool): if True/False, big/little endian ordering will be assumed
 
-        Returns:
-            QuantumCircuit (the circuit implementing the operator in Qiskit)
+    Returns:
+        QuantumCircuit (the circuit implementing the operator in Qiskit)
     """
 
     a, b = source_orbs
@@ -162,18 +165,18 @@ def double_qe_circuit(source_orbs, target_orbs, theta, n, big_endian=False):
 
 def single_qe_circuit(source_orb, target_orb, theta, n, big_endian=False):
     """
-        Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
-        Example: if source_orb = [0] and target_orb = [1], this implements theta * 1/2 (X1 Y0 - Y1 X0)
+    Creates a qubit excitation circuit. See https://doi.org/10.1103/PhysRevA.102.062612
+    Example: if source_orb = [0] and target_orb = [1], this implements theta * 1/2 (X1 Y0 - Y1 X0)
 
-        Arguments:
-            source_orb (list): the spin-orbital from which the excitation removes electrons
-            target_orb (list): the spin-orbital to which the excitation adds electrons
-            theta (float): the coefficient of the excitation
-            n (int): the number of qubits
-            big_endian (bool): if True/False, big/little endian ordering will be assumed
+    Arguments:
+        source_orb (list): the spin-orbital from which the excitation removes electrons
+        target_orb (list): the spin-orbital to which the excitation adds electrons
+        theta (float): the coefficient of the excitation
+        n (int): the number of qubits
+        big_endian (bool): if True/False, big/little endian ordering will be assumed
 
-        Returns:
-            QuantumCircuit (the circuit implementing the operator in Qiskit)
+    Returns:
+        QuantumCircuit (the circuit implementing the operator in Qiskit)
     """
 
     a = source_orb[0]
@@ -226,7 +229,7 @@ def pauli_exp_circuit(qubit_operator, n, revert_endianness=False):
             pauli_string = pauli_string + "I" * (n - len(pauli_string))
             pauli_string = pauli_string[::-1]
 
-        assert coeff.real < 10 ** -8
+        assert coeff.real < 10**-8
         coeff = coeff.imag
 
         active_qubits = []

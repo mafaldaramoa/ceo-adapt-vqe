@@ -10,7 +10,7 @@ import numpy as np
 from openfermion import FermionOperator
 
 # Chemical accuracy threshold (au)
-chemical_accuracy = 1.5936 * 10 ** -3
+chemical_accuracy = 1.5936 * 10**-3
 
 
 def get_hf_det(electron_number, qubit_number):
@@ -68,8 +68,12 @@ def create_spin_adapted_one_body_op(p, q):
     We assume the OF orbital ordering (alternating up and down spin, spin-orbitals
     corresponding to the same spatial orbital are adjacent numbers).
     """
-    e_pq = FermionOperator(f'{2 * p}^ {2 * q}', 1) + FermionOperator(f'{2 * p + 1}^ {2 * q + 1}')
-    e_qp = FermionOperator(f'{2 * q}^ {2 * p}', 1) + FermionOperator(f'{2 * q + 1}^ {2 * p + 1}')
+    e_pq = FermionOperator(f"{2 * p}^ {2 * q}", 1) + FermionOperator(
+        f"{2 * p + 1}^ {2 * q + 1}"
+    )
+    e_qp = FermionOperator(f"{2 * q}^ {2 * p}", 1) + FermionOperator(
+        f"{2 * q + 1}^ {2 * p + 1}"
+    )
 
     op = e_pq - e_qp
     op = normalize_op(op)

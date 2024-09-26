@@ -11,8 +11,14 @@ except:
     # Quspin not installed. Will try to use precalculated Hamiltonian ground energies if necessary.
     # Todo: fix, it's ugly
 
-from adaptvqe.matrix_tools import ket_to_vector
-from openfermion import fermi_hubbard, get_ground_state, get_sparse_operator, get_quadratic_hamiltonian
+from openfermion import (
+    fermi_hubbard,
+    get_ground_state,
+    get_sparse_operator,
+    get_quadratic_hamiltonian,
+)
+
+from .matrix_tools import ket_to_vector
 
 
 class HubbardHamiltonian:
@@ -36,7 +42,9 @@ class HubbardHamiltonian:
 
         self.description = f"HH_{x_dim}_{y_dim}_{t}_{u}"
 
-        h = fermi_hubbard(x_dim, y_dim, t, u, periodic=p_b_conds, particle_hole_symmetry=ph_sym)
+        h = fermi_hubbard(
+            x_dim, y_dim, t, u, periodic=p_b_conds, particle_hole_symmetry=ph_sym
+        )
         self.operator = h
 
         self._ground_energy = None
@@ -46,7 +54,7 @@ class HubbardHamiltonian:
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
 
-        '''
+        """
         # Use non interacting ground state instead of Néel as the reference state:
         h = fermi_hubbard(x_dim, l, t, 0, periodic=p_b_conds, particle_hole_symmetry=ph_sym)
         quad_ham = get_quadratic_hamiltonian(h)
@@ -54,7 +62,7 @@ class HubbardHamiltonian:
         non_int_ground_energy, non_int_ground_state = get_ground_state(sparse_h)
         non_int_ground_state = csc_matrix(non_int_ground_state).transpose()
         self.ref_state = non_int_ground_state
-        '''
+        """
 
     @property
     def ground_state(self):
@@ -63,7 +71,9 @@ class HubbardHamiltonian:
         """
 
         if self._ground_state is None:
-            ground_energy, ground_state = get_ground_state(get_sparse_operator(self.operator))
+            ground_energy, ground_state = get_ground_state(
+                get_sparse_operator(self.operator)
+            )
             self._ground_state = ground_state
             self._ground_energy = ground_energy
 
@@ -76,7 +86,9 @@ class HubbardHamiltonian:
         """
 
         if self._ground_energy is None:
-            ground_energy, ground_state = get_ground_state(get_sparse_operator(self.operator))
+            ground_energy, ground_state = get_ground_state(
+                get_sparse_operator(self.operator)
+            )
             self._ground_state = ground_state
             self._ground_energy = ground_energy
 
@@ -96,8 +108,10 @@ class XXZHamiltonian:
         # Define Hamiltonian in Openfermion
         h = QubitOperator()
         for i in range(l - 1):
-            h += j_xy * (QubitOperator(f'X{i} X{i + 1}') + QubitOperator(f'Y{i} Y{i + 1}'))
-            h += j_z * QubitOperator(f'Z{i} Z{i + 1}')
+            h += j_xy * (
+                QubitOperator(f"X{i} X{i + 1}") + QubitOperator(f"Y{i} Y{i + 1}")
+            )
+            h += j_z * QubitOperator(f"Z{i} Z{i + 1}")
         self.operator = h
 
         # Try to load precomputed ground energy
@@ -112,7 +126,9 @@ class XXZHamiltonian:
             static = [["+-", j_xy], ["-+", j_xy], ["zz", j_zz]]
             dynamic = []
             h_xxz = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
-            emin, emax = h_xxz.eigsh(k=2, which="BE", maxiter=1E4, return_eigenvectors=False)
+            emin, emax = h_xxz.eigsh(
+                k=2, which="BE", maxiter=1e4, return_eigenvectors=False
+            )
             self.ground_energy = emin
 
         neel_state_cb = [i % 2 for i in range(l)]

@@ -5,34 +5,28 @@ Created on Wed Jun 29 11:19:38 2022
 @author: mafal
 """
 
-import numpy as np
 from copy import deepcopy
+
+import numpy as np
 from qiskit import QuantumCircuit
-from adaptvqe.circuits import cnot_depth, cnot_count
-from adaptvqe.op_conv import get_qasm
+
+from ..circuits import cnot_depth, cnot_count
+from ..op_conv import get_qasm
 
 
 class AnsatzData:
 
-    def __init__(self,
-                 coefficients=[],
-                 indices=[],
-                 sel_gradients=[]):
+    def __init__(self, coefficients=[], indices=[], sel_gradients=[]):
         self.coefficients = coefficients
         self.indices = indices
         self.sel_gradients = sel_gradients
 
-    def grow(self,
-             indices,
-             new_coefficients,
-             sel_gradients):
+    def grow(self, indices, new_coefficients, sel_gradients):
         self.indices = indices
         self.coefficients = new_coefficients
         self.sel_gradients = np.append(self.sel_gradients, sel_gradients)
 
-    def remove(self,
-               index,
-               new_coefficients):
+    def remove(self, index, new_coefficients):
         self.indices.pop(index)
         self.coefficients = new_coefficients
         rem_grad = self.sel_gradients.pop(index)
@@ -46,26 +40,27 @@ class AnsatzData:
 
 class IterationData:
 
-    def __init__(self,
-                 ansatz=None,
-                 energy=None,
-                 error=None,
-                 energy_change=None,
-                 gradient_norm=None,
-                 sel_gradients=None,
-                 inv_hessian=None,
-                 gradients=None,
-                 nfevs=None,
-                 ngevs=None,
-                 nits=None
-                 ):
-        '''
+    def __init__(
+        self,
+        ansatz=None,
+        energy=None,
+        error=None,
+        energy_change=None,
+        gradient_norm=None,
+        sel_gradients=None,
+        inv_hessian=None,
+        gradients=None,
+        nfevs=None,
+        ngevs=None,
+        nits=None,
+    ):
+        """
         Ansatz and energy at the end of the iteration
         Gradient of selected operator (before optimization)
         Gradient norm (before optimization)
         Number of function evaluations
         Number o gradient vector evaluations
-        '''
+        """
         if ansatz:
             self.ansatz = deepcopy(ansatz)
         else:
@@ -85,9 +80,7 @@ class IterationData:
 
 class EvolutionData:
 
-    def __init__(self,
-                 initial_energy,
-                 prev_ev_data=None):
+    def __init__(self, initial_energy, prev_ev_data=None):
 
         self.initial_energy = initial_energy
 
@@ -97,18 +90,20 @@ class EvolutionData:
             # List of IterationData objects
             self.its_data = []
 
-    def reg_it(self,
-               coefficients,
-               indices,
-               energy,
-               error,
-               gradient_norm,
-               sel_gradients,
-               inv_hessian,
-               gradients,
-               nfevs,
-               ngevs,
-               nits):
+    def reg_it(
+        self,
+        coefficients,
+        indices,
+        energy,
+        error,
+        gradient_norm,
+        sel_gradients,
+        inv_hessian,
+        gradients,
+        nfevs,
+        ngevs,
+        nits,
+    ):
 
         if self.its_data:
             previous_energy = self.last_it.energy
@@ -118,21 +113,21 @@ class EvolutionData:
         energy_change = energy - previous_energy
 
         ansatz = deepcopy(self.last_it.ansatz)
-        ansatz.grow(indices,
-                    coefficients,
-                    sel_gradients)
+        ansatz.grow(indices, coefficients, sel_gradients)
 
-        it_data = IterationData(ansatz,
-                                energy,
-                                error,
-                                energy_change,
-                                gradient_norm,
-                                sel_gradients,
-                                inv_hessian,
-                                gradients,
-                                nfevs,
-                                ngevs,
-                                nits)
+        it_data = IterationData(
+            ansatz,
+            energy,
+            error,
+            energy_change,
+            gradient_norm,
+            sel_gradients,
+            inv_hessian,
+            gradients,
+            nfevs,
+            ngevs,
+            nits,
+        )
 
         self.its_data.append(it_data)
 
@@ -201,7 +196,7 @@ class EvolutionData:
 
 
 class AdaptData:
-    '''
+    """
     Class meant to store data from an Adapt VQE run.
 
     Methods:
@@ -209,16 +204,12 @@ class AdaptData:
         iteration
       close: to be called by the AdaptVQE class at the end of the run
       plot: to be called to plot data after the run
-    '''
+    """
 
-    def __init__(self,
-                 initial_energy,
-                 pool,
-                 sparse_ref_state,
-                 file_name,
-                 fci_energy,
-                 n):
-        '''
+    def __init__(
+        self, initial_energy, pool, sparse_ref_state, file_name, fci_energy, n
+    ):
+        """
         Initialize class instance
 
         Arguments:
@@ -228,7 +219,7 @@ class AdaptData:
           file_name (str): a string describing the ADAPT implementation type and molecule
           fci_energy (float): the exact ground energy
           n (int): the size of the system
-        '''
+        """
 
         self.pool_name = pool.name
 
@@ -248,18 +239,20 @@ class AdaptData:
         self.closed = False
         self.success = False
 
-    def process_iteration(self,
-                          indices,
-                          energy,
-                          gradient_norm,
-                          selected_gradients,
-                          coefficients,
-                          inv_hessian,
-                          gradients,
-                          nfevs,
-                          ngevs,
-                          nits):
-        '''
+    def process_iteration(
+        self,
+        indices,
+        energy,
+        gradient_norm,
+        selected_gradients,
+        coefficients,
+        inv_hessian,
+        gradients,
+        nfevs,
+        ngevs,
+        nits,
+    ):
+        """
         Receives and processes the values fed to it by an instance of the AdaptVQE
         class at the end of each run.
 
@@ -276,77 +269,82 @@ class AdaptData:
           optimization. List length should match the number of optimizations
           ngevs (list): the number of evaluations of operator gradients during the
           optimization. List length should match the number of optimizations
-        '''
+        """
 
         if not isinstance(energy, float):
-            raise TypeError("Expected float, not {}."
-                            .format(type(energy).__name__))
+            raise TypeError("Expected float, not {}.".format(type(energy).__name__))
 
         if not isinstance(gradient_norm, float):
-            raise TypeError("Expected float, not {}."
-                            .format(type(gradient_norm).__name__))
+            raise TypeError(
+                "Expected float, not {}.".format(type(gradient_norm).__name__)
+            )
 
-        if not (isinstance(selected_gradients, list) or isinstance(selected_gradients, np.ndarray)):
-            raise TypeError("Expected list, not {}."
-                            .format(type(selected_gradients).__name__))
+        if not (
+            isinstance(selected_gradients, list)
+            or isinstance(selected_gradients, np.ndarray)
+        ):
+            raise TypeError(
+                "Expected list, not {}.".format(type(selected_gradients).__name__)
+            )
 
         if not isinstance(coefficients, list):
-            raise TypeError("Expected list, not {}."
-                            .format(type(coefficients).__name__))
+            raise TypeError(
+                "Expected list, not {}.".format(type(coefficients).__name__)
+            )
 
         if not isinstance(nfevs, list):
-            raise TypeError("Expected list, not {}."
-                            .format(type(nfevs).__name__))
+            raise TypeError("Expected list, not {}.".format(type(nfevs).__name__))
 
         if not isinstance(ngevs, list):
-            raise TypeError("Expected list, not {}."
-                            .format(type(ngevs).__name__))
+            raise TypeError("Expected list, not {}.".format(type(ngevs).__name__))
 
         if not isinstance(nits, list):
-            raise TypeError("Expected list, not {}."
-                            .format(type(ngevs).__name__))
+            raise TypeError("Expected list, not {}.".format(type(ngevs).__name__))
 
         if len(coefficients) != len(indices):
-            raise ValueError("The length of the coefficient list should match the"
-                             " ansatz size ({} != {})."
-                             .format(len(coefficients),
-                                     len(indices)))
-        '''
+            raise ValueError(
+                "The length of the coefficient list should match the"
+                " ansatz size ({} != {}).".format(len(coefficients), len(indices))
+            )
+        """
         if gradients is not None:
             if len(gradients) != len(indices):
                 raise ValueError("The length of the gradient vector match the"
                                  " ansatz size ({} != {})."
                                  .format(len(gradients),
-                                         len(indices)))'''
+                                         len(indices)))"""
 
         if gradient_norm < 0:
-            raise ValueError("Total gradient norm should be positive; its {}".
-                             format(gradient_norm))
+            raise ValueError(
+                "Total gradient norm should be positive; its {}".format(gradient_norm)
+            )
 
         error = energy - self.fci_energy
-        self.evolution.reg_it(coefficients,
-                              indices,
-                              energy,
-                              error,
-                              gradient_norm,
-                              selected_gradients,
-                              inv_hessian,
-                              gradients,
-                              nfevs,
-                              ngevs,
-                              nits)
+        self.evolution.reg_it(
+            coefficients,
+            indices,
+            energy,
+            error,
+            gradient_norm,
+            selected_gradients,
+            inv_hessian,
+            gradients,
+            nfevs,
+            ngevs,
+            nits,
+        )
 
         self.iteration_counter += 1
 
         return energy
 
     def acc_depths(self, pool):
-        '''
+        """
         Outputs the list of accumulated depth through the iterations.
         Depth for iteration 0 (reference state), then for 1, then for 2, etc.
         Depth is the total number of gate layers - entangling or not, all gates are
         considered equal
-        '''
+        """
         assert pool.name == self.pool_name
 
         acc_depths = [0]
@@ -368,11 +366,11 @@ class AdaptData:
         return acc_depths
 
     def acc_cnot_depths(self, pool, fake_params=False):
-        '''
+        """
         Outputs the list of accumulated CNOT depth through the iterations.
         Depth for iteration 0 (reference state), then for 1, then for 2, etc.
         All single qubit gates are ignored.
-        '''
+        """
 
         acc_depths = [0]
         ansatz_size = 0
@@ -393,7 +391,7 @@ class AdaptData:
             new_circuit = pool.get_circuit(new_indices, new_coefficients)
             circuit = circuit.compose(new_circuit)
             qasm_circuit = get_qasm(circuit)
-            depth = cnot_depth(qasm_circuit,self.n)
+            depth = cnot_depth(qasm_circuit, self.n)
             acc_depths.append(depth)
 
         return acc_depths
@@ -424,13 +422,13 @@ class AdaptData:
         return acc_counts
 
     def close(self, success, file_name=None):
-        '''
+        """
         To be called at the end of the run, to close the data structures
 
         Arguments:
           success (bool): True if the convergence condition was met, False if not
             (the maximum number of iterations was met before that)
-        '''
+        """
 
         self.result = self.evolution.last_it
         self.closed = True
@@ -440,9 +438,9 @@ class AdaptData:
 
     @property
     def current(self):
-        '''
+        """
         Current iteration
-        '''
+        """
         if self.evolution.its_data:
             return self.evolution.last_it
         else:

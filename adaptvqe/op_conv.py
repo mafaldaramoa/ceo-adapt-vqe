@@ -7,12 +7,14 @@ Created on Wed Jun 29 09:20:36 2022
 
 import numpy as np
 
-from openfermion import (count_qubits,
-                         FermionOperator,
-                         QubitOperator,
-                         get_fermion_operator,
-                         InteractionOperator,
-                         jordan_wigner)
+from openfermion import (
+    count_qubits,
+    FermionOperator,
+    QubitOperator,
+    get_fermion_operator,
+    InteractionOperator,
+    jordan_wigner,
+)
 import qiskit
 from qiskit.qasm3 import dumps
 
@@ -20,6 +22,7 @@ from qiskit.qasm3 import dumps
 if int(qiskit.__version__[0]) >= 1:
     # opflow has been deprecated
     from qiskit.quantum_info import Pauli
+
     I = Pauli("I")
     X = Pauli("X")
     Y = Pauli("Y")
@@ -27,7 +30,8 @@ if int(qiskit.__version__[0]) >= 1:
 else:
     from qiskit.opflow import I, Z, X, Y
 
-from adaptvqe.matrix_tools import string_to_matrix
+from .matrix_tools import string_to_matrix
+
 
 def get_qasm(qc):
     """
@@ -45,6 +49,7 @@ def get_qasm(qc):
         qasm = qc.qasm()
 
     return qasm
+
 
 def endian_conv(index, n):
     """
@@ -80,8 +85,9 @@ def to_qiskit_pauli(letter):
     elif letter == "Z":
         qiskit_pauli = Z
     else:
-        raise ValueError("Letter isn't recognized as a Pauli operator"
-                         " (must be X, Y or Z).")
+        raise ValueError(
+            "Letter isn't recognized as a Pauli operator" " (must be X, Y or Z)."
+        )
 
     return qiskit_pauli
 
@@ -102,8 +108,10 @@ def to_qiskit_term(of_term, n, switch_endianness):
     pauli_strings = list(of_term.terms.keys())
 
     if len(pauli_strings) > 1:
-        raise ValueError("Input must consist of a single Pauli string."
-                         " Use to_qiskit_operator for other operators.")
+        raise ValueError(
+            "Input must consist of a single Pauli string."
+            " Use to_qiskit_operator for other operators."
+        )
     pauli_string = pauli_strings[0]
 
     coefficient = of_term.terms[pauli_string]
@@ -155,14 +163,14 @@ def to_qiskit_operator(of_operator, n=None, little_endian=True):
     if not n:
         n = count_qubits(of_operator)
 
-    # Now use the Jordan Wigner transformation to map the FermionOperator into 
+    # Now use the Jordan Wigner transformation to map the FermionOperator into
     # a QubitOperator
     if isinstance(of_operator, FermionOperator):
         of_operator = jordan_wigner(of_operator)
 
     qiskit_operator = 0
 
-    # Iterate through the terms in the operator. Each is a Pauli string 
+    # Iterate through the terms in the operator. Each is a Pauli string
     # multiplied by a coefficient
     for term in of_operator.get_operators():
         qiskit_term = to_qiskit_term(term, n, little_endian)
@@ -196,7 +204,7 @@ def find_substrings(main_string, hamiltonian, checked=[]):
 
     grouped_operators = {}
 
-    # Go through the keys in the dictionary representing the Hamiltonian that 
+    # Go through the keys in the dictionary representing the Hamiltonian that
     # haven't been grouped yet, and find those that only differ from main_string
     # by identities
     for pauli_string in hamiltonian:
@@ -204,20 +212,26 @@ def find_substrings(main_string, hamiltonian, checked=[]):
         if pauli_string not in checked:
             # The string hasn't been grouped yet
 
-            if (all((op1 == op2 or op2 == "I")
-                    for op1, op2 in zip(main_string, pauli_string))):
+            if all(
+                (op1 == op2 or op2 == "I")
+                for op1, op2 in zip(main_string, pauli_string)
+            ):
                 # The string only differs from main_string by identities
 
                 # Represent the string as a substring of the main one
-                boolean_string = "".join([str(int(op1 == op2)) for op1, op2 in
-                                          zip(main_string, pauli_string)])
+                boolean_string = "".join(
+                    [
+                        str(int(op1 == op2))
+                        for op1, op2 in zip(main_string, pauli_string)
+                    ]
+                )
 
-                # Add the boolean string representing this string as a key to 
+                # Add the boolean string representing this string as a key to
                 # the dictionary of grouped operators, and associate its
                 # coefficient as its value
                 grouped_operators[boolean_string] = hamiltonian[pauli_string]
 
-                # Mark the string as grouped, so that it's not added to any 
+                # Mark the string as grouped, so that it's not added to any
                 # other group
                 checked.append(pauli_string)
 
@@ -249,15 +263,16 @@ def group_hamiltonian(hamiltonian):
 
     # Go through the hamiltonian, starting by the terms that have less
     # identity operators
-    for main_string in \
-            sorted(hamiltonian, key=lambda pauli_string: pauli_string.count("I")):
+    for main_string in sorted(
+        hamiltonian, key=lambda pauli_string: pauli_string.count("I")
+    ):
 
-        # Call find_substrings to find all the strings in the dictionary that 
+        # Call find_substrings to find all the strings in the dictionary that
         # only differ from main_string by identities, and organize them as a
         # dictionary (grouped_operators)
         grouped_operators, checked = find_substrings(main_string, hamiltonian, checked)
 
-        # Use the dictionary as a value for the main_string key in the 
+        # Use the dictionary as a value for the main_string key in the
         # grouped_hamiltonian dictionary
         grouped_hamiltonian[main_string] = grouped_operators
 
@@ -270,16 +285,16 @@ def group_hamiltonian(hamiltonian):
 
 def convert_hamiltonian(openfermion_hamiltonian):
     """
-  Formats a qubit Hamiltonian obtained from openfermion, so that it's a suitable
-  argument for functions such as measure_expectation_estimation.
+    Formats a qubit Hamiltonian obtained from openfermion, so that it's a suitable
+    argument for functions such as measure_expectation_estimation.
 
-  Arguments:
-    openfermion_hamiltonian (openfermion.qubitOperator): the Hamiltonian.
+    Arguments:
+      openfermion_hamiltonian (openfermion.qubitOperator): the Hamiltonian.
 
-  Returns:
-    formatted_hamiltonian (dict): the Hamiltonian as a dictionary with Pauli
-      strings (eg 'YXZI') as keys and their coefficients as values.
-  """
+    Returns:
+      formatted_hamiltonian (dict): the Hamiltonian as a dictionary with Pauli
+        strings (eg 'YXZI') as keys and their coefficients as values.
+    """
 
     formatted_hamiltonian = {}
     qubit_number = count_qubits(openfermion_hamiltonian)
@@ -292,21 +307,21 @@ def convert_hamiltonian(openfermion_hamiltonian):
         pauli_string = list(term.terms.keys())[0]
         previous_qubit = -1
 
-        for (qubit, operator) in pauli_string:
+        for qubit, operator in pauli_string:
 
             # If there are qubits in which no operations are performed, add identities
             # as necessary, to make sure that the length of the string will match the
             # number of qubits
-            identities = (qubit - previous_qubit - 1)
+            identities = qubit - previous_qubit - 1
             if identities > 0:
-                operators.append('I' * identities)
+                operators.append("I" * identities)
 
             operators.append(operator)
             previous_qubit = qubit
 
         # Add final identity operators if the string still doesn't have the
         # correct length (because no operations are performed in the last qubits)
-        operators.append('I' * (qubit_number - previous_qubit - 1))
+        operators.append("I" * (qubit_number - previous_qubit - 1))
 
         formatted_hamiltonian["".join(operators)] = coefficient
 
@@ -334,15 +349,16 @@ def hamiltonian_to_matrix(hamiltonian):
     formatted_hamiltonian = convert_hamiltonian(hamiltonian)
     grouped_hamiltonian = group_hamiltonian(formatted_hamiltonian)
 
-    matrix = np.zeros((2 ** qubit_number, 2 ** qubit_number), dtype=complex)
+    matrix = np.zeros((2**qubit_number, 2**qubit_number), dtype=complex)
 
-    # Iterate through the strings in the Hamiltonian, adding the respective 
+    # Iterate through the strings in the Hamiltonian, adding the respective
     # contribution to the matrix
     for string in grouped_hamiltonian:
 
         for substring in grouped_hamiltonian[string]:
-            pauli = ("".join("I" * (not int(b)) + a * int(b)
-                             for (a, b) in zip(string, substring)))
+            pauli = "".join(
+                "I" * (not int(b)) + a * int(b) for (a, b) in zip(string, substring)
+            )
 
             matrix += string_to_matrix(pauli) * grouped_hamiltonian[string][substring]
 
@@ -375,7 +391,7 @@ def read_of_qubit_operator(operator):
 
         strings.append(string)
         qubit_lists.append(qubits)
-        assert np.abs(coefficient.real) < 10 ** -8
+        assert np.abs(coefficient.real) < 10**-8
         coefficient = coefficient.imag
         coefficients.append(coefficient)
 
