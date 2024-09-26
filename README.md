@@ -15,7 +15,9 @@ pip install .
 
 This takes care of installing all required packages.
 
-Creating a clean virtual environment using Anaconda is recommended. Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
+Creating a clean virtual environment using Anaconda is recommended. Python>=3.10 is required.
+
+Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
 
 The results in the papers were obtained with the following package versions:
 
