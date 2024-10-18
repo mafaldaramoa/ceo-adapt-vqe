@@ -2316,7 +2316,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             # Second case: we're not recycling orbital parameters, so we must recalculate gradients
             g0 = self.estimate_gradients(initial_coefficients, indices)
             extra_njev = 1
-        print("Here2", g0)
+            
         # Perform optimization
         opt_result = minimize_bfgs(
             e_fun,
@@ -2389,7 +2389,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 e0 = self.energy
         if maxiters is None:
             maxiters = self.max_opt_iter
-        print("Here", g0)
+            
         initial_coefficients = np.append(
             [0 for _ in range(self.orb_opt_dim)], initial_coefficients
         )
