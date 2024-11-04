@@ -3419,8 +3419,8 @@ from adaptvqe.op_conv import to_qiskit_operator
 class SampledLinAlgAdapt(LinAlgAdapt):
     """
     Do everything without noise, but then sample from the statevector instead of calculating the exact expectation value
-    Only works for the qubit pool as of now because the finite differences are implemented in the simplest way possible
-    If shots is None implements sampling noise free algorithm
+    Only works for the qubit pool as of now because the parameter shift rules are implemented only for individual Pauli strings
+    If shots is None, implements sampling noise free algorithm
     """
 
     def __init__(self, *args, **kvargs):
