@@ -1252,7 +1252,7 @@ class PauliPool(SingletGSD):
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
             qubit_operator = coefficient * self.operators[index].q_operator
-            qc = pauli_exp_circuit(qubit_operator, self.n, big_endian=True)
+            qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
 
             circuit = circuit.compose(qc)
             circuit.barrier()

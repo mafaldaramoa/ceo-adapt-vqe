@@ -116,7 +116,7 @@ def to_qiskit_term(of_term, n, switch_endianness):
 
     coefficient = of_term.terms[pauli_string]
 
-    qiskit_op = 1
+    qiskit_op = None
 
     previous_index = -1
 
@@ -125,19 +125,26 @@ def to_qiskit_term(of_term, n, switch_endianness):
         id_count = qubit_index - previous_index - 1
 
         if switch_endianness:
-            new_ops = to_qiskit_pauli(pauli) ^ (I ^ id_count)
-            qiskit_op = new_ops ^ qiskit_op
+            new_ops = to_qiskit_pauli(pauli)
+            for _ in range(id_count):
+                new_ops = new_ops ^ I
+            if qiskit_op is None:
+                qiskit_op = new_ops
+            else:
+                qiskit_op = new_ops ^ qiskit_op
         else:
             new_ops = (I ^ id_count) ^ to_qiskit_pauli(pauli)
             qiskit_op = qiskit_op ^ new_ops
 
         previous_index = qubit_index
 
+    id_count = (n - previous_index - 1)
     if switch_endianness:
-        qiskit_op = (I ^ (n - previous_index - 1)) ^ qiskit_op
-
+        for _ in range(id_count):
+            qiskit_op = I ^ qiskit_op
     else:
-        qiskit_op = qiskit_op ^ (I ^ (n - previous_index - 1))
+        for _ in range(id_count):
+            qiskit_op = qiskit_op ^ I
 
     qiskit_op = coefficient * qiskit_op
 
@@ -168,13 +175,16 @@ def to_qiskit_operator(of_operator, n=None, little_endian=True):
     if isinstance(of_operator, FermionOperator):
         of_operator = jordan_wigner(of_operator)
 
-    qiskit_operator = 0
+    qiskit_operator = None
 
     # Iterate through the terms in the operator. Each is a Pauli string
     # multiplied by a coefficient
     for term in of_operator.get_operators():
         qiskit_term = to_qiskit_term(term, n, little_endian)
-        qiskit_operator += qiskit_term
+        if qiskit_operator is None:
+            qiskit_operator = qiskit_term
+        else:
+            qiskit_operator += qiskit_term
 
     return qiskit_operator
 
