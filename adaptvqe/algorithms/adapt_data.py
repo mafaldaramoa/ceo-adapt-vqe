@@ -47,6 +47,7 @@ class IterationData:
         error=None,
         energy_change=None,
         gradient_norm=None,
+        prep_gradient_norm=None,
         sel_gradients=None,
         inv_hessian=None,
         gradients=None,
@@ -70,6 +71,7 @@ class IterationData:
         self.energy_change = energy_change
         self.error = error
         self.gradient_norm = gradient_norm
+        self.prep_gradient_norm = prep_gradient_norm
         self.sel_gradients = sel_gradients
         self.inv_hessian = inv_hessian
         self.gradients = gradients
@@ -97,6 +99,7 @@ class EvolutionData:
         energy,
         error,
         gradient_norm,
+        prep_gradient_norm,
         sel_gradients,
         inv_hessian,
         gradients,
@@ -121,6 +124,7 @@ class EvolutionData:
             error,
             energy_change,
             gradient_norm,
+            prep_gradient_norm,
             sel_gradients,
             inv_hessian,
             gradients,
@@ -160,6 +164,10 @@ class EvolutionData:
     @property
     def gradient_norms(self):
         return [it_data.gradient_norm for it_data in self.its_data]
+
+    @property
+    def prep_gradient_norms(self):
+        return [it_data.prep_gradient_norm for it_data in self.its_data]
 
     @property
     def indices(self):
@@ -244,6 +252,7 @@ class AdaptData:
         indices,
         energy,
         gradient_norm,
+        prep_gradient_norm,
         selected_gradients,
         coefficients,
         inv_hessian,
@@ -261,6 +270,7 @@ class AdaptData:
           energy (float): the optimized energy, at the end of the iteration
           gradient_norm (int): the norm of the total gradient norm at the beggining
             of this iteration
+          prep_gradient_norm (int): same as above, but prepending instead of appending
           selected_gradient (float): the absolute value of the gradient of the
             operator that was added in this iteration
           coefficients (list): a list of the coefficients selected by the optimizer
@@ -274,9 +284,14 @@ class AdaptData:
         if not isinstance(energy, float):
             raise TypeError("Expected float, not {}.".format(type(energy).__name__))
 
-        if not isinstance(gradient_norm, float):
+        if not isinstance(gradient_norm, (float, np.floating)):
             raise TypeError(
                 "Expected float, not {}.".format(type(gradient_norm).__name__)
+            )
+
+        if prep_gradient_norm is not None and not isinstance(prep_gradient_norm, (float,np.float64)):
+            raise TypeError(
+                "Expected float, not {}.".format(type(prep_gradient_norm).__name__)
             )
 
         if not (
@@ -318,6 +333,10 @@ class AdaptData:
             raise ValueError(
                 "Total gradient norm should be positive; its {}".format(gradient_norm)
             )
+        if prep_gradient_norm is not None and prep_gradient_norm < 0:
+            raise ValueError(
+                "Total gradient norm should be positive; its {}".format(gradient_norm)
+            )
 
         error = energy - self.fci_energy
         self.evolution.reg_it(
@@ -326,6 +345,7 @@ class AdaptData:
             energy,
             error,
             gradient_norm,
+            prep_gradient_norm,
             selected_gradients,
             inv_hessian,
             gradients,
