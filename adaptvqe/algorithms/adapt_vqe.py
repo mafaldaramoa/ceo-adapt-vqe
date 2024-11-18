@@ -10,7 +10,7 @@ import abc
 import numpy as np
 import scipy
 
-from scipy.sparse import csc_matrix
+from scipy.sparse import csc_matrix, issparse
 from scipy.sparse.linalg import expm, expm_multiply
 
 from openfermion import get_sparse_operator, count_qubits
@@ -51,6 +51,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         frozen_orbitals=[],
         shots=None,
         track_prep_g=False,
+        previous_data=None
     ):
         """
         Arguments:
@@ -90,6 +91,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 below 10**-8). If False, the largest gradient is decided by the ">" operator.
             frozen_orbitals (list): Indices of orbitals that are considered to be permanently occupied. Note that
                 virtual orbitals are not yet implemented.
+            previous_data (AdaptData): data from a previous run of ADAPT we wish to continue
         """
 
         self.pool = pool
@@ -117,12 +119,12 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.dve = "DVE" in self.pool.name
         self.mvp = "MVP" in self.pool.name
 
+        self.data = previous_data  # AdaptData object
         self.initialize_hamiltonian()  # Initialize and store Hamiltonian and initial energy
         self.create_orb_rotation_ops()  # Create list of orbital rotation operators
         self.gradients = np.array(())
         self.orb_opt_dim = len(self.orb_ops)
         self.detail_file_name()  # Create detailed file name including all options
-        self.data = None  # Initialize attribute that will contain AdaptData object
         self.energy_meas = self.observable_to_measurement(
             self.hamiltonian
         )  # Transform Hamiltonian into measurement
@@ -209,9 +211,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         if self.frozen_orbitals != self.pool.frozen_orbitals:
             raise ValueError("Frozen orbitals must match the pool's.")
 
-        if (self.molecule is not None) + (self.custom_hamiltonian is not None) != 1:
+        if (self.molecule is not None) + (self.custom_hamiltonian is not None) + (self.data is not None) != 1:
             raise ValueError(
-                "Exactly one out of molecule / custom Hamiltonian must be specified."
+                "Exactly one out of molecule / custom Hamiltonian / previous AdaptData must be provided."
             )
 
         if not self.recycle_hessian and self.sel_criterion == "line_search":
@@ -228,8 +230,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         """
         Initialize attributes associated with the Hamiltonian.
         """
-
-        if self.molecule is not None:
+        if self.data is not None:
+            hamiltonian = self.initialize_with_previous_data()
+        elif self.molecule is not None:
             hamiltonian = self.initialize_with_molecule()
         else:
             hamiltonian = self.initialize_with_hamiltonian()
@@ -261,6 +264,26 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             f"{self.molecule.description}_r={self.molecule.geometry[1][1][2]}"
         )
         self.exact_energy = self.molecule.fci_energy
+
+        return hamiltonian
+
+    def initialize_with_previous_data(self):
+        """
+        Initialize attributes using previous AdaptData object.
+        """
+
+        self.n = self.data.n
+
+        self.ref_det = self.data.ref_det
+        self.sparse_ref_state = self.data.sparse_ref_state
+
+        hamiltonian = self.data.hamiltonian
+
+        self.file_name = "_".join(self.data.file_name.split("_")[:2])
+
+        self.exact_energy = self.data.fci_energy
+
+        self.load(previous_data=self.data)
 
         return hamiltonian
 
@@ -312,16 +335,22 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         """
 
         if previous_data is not None:
-            description_other = previous_data.file_name.split(
-                str(previous_data.iteration_counter) + "i"
-            )
-            description_self = self.file_name.split(str(self.max_adapt_iter) + "i")
-
-            # Description must match except iteration number
-            assert description_self == description_other
 
             self.data = deepcopy(previous_data)
-            self.data.file_name = self.file_name
+            self.file_name = self.data.file_name
+
+            # Make sure we're continuing the run of ADAPT with the same settings
+            assert self.pool.name == self.data.pool_name
+            assert bool("rec_hess" in self.file_name) == self.recycle_hessian
+            assert bool("tetris" in self.file_name) == self.tetris
+            assert bool("prog" in self.file_name) == self.progressive_opt
+            assert bool("oo" in self.file_name) == self.orb_opt
+            assert bool("1D" in self.file_name) == (not self.full_opt)
+            assert bool("pen_cnots" in  self.file_name) == self.penalize_cnots
+            if self.candidates > 1:
+                assert str(self.candidates) in self.file_name
+            if self.convergence_criterion != "total_g_norm":
+                assert str(self.convergence_criterion) in self.file_name
 
             # Set current state to the last iteration of the loaded data
             self.indices = self.data.evolution.indices[-1]
@@ -351,13 +380,14 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         Prints the options that were chosen for the Adapt VQE run.
         """
         print(f"> Pool: {self.pool.name}")
-        if self.molecule is not None:
-            print(
-                f"> Molecule: {self.molecule.description}"
-                f" (interatomic distance {self.molecule.geometry[1][1][2]}Å)"
-            )
-        else:
+        if self.custom_hamiltonian is not None:
             print(f"> Custom Hamiltonian: {self.custom_hamiltonian.description}")
+        else:
+            molecule, r = self.file_name.split("_")[:2]
+            print(
+                f"> Molecule: {molecule}"
+                f" (interatomic distance {r}Å)"
+            )
         print(f"> Orbital Optimization: {self.orb_opt}")
         print(f"> Selection method: {self.sel_criterion}")
         print(f"> Convergence criterion: {self.convergence_criterion}")
@@ -1245,25 +1275,34 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         Initialize data structures.
         """
 
-        initial_energy = self.evaluate_energy()
-        self.energy = initial_energy
-
         if not self.data:
+
+            initial_energy = self.evaluate_energy()
+            self.energy = initial_energy
+
             # We're starting a fresh ADAPT-VQE; create new AdaptData instance and initialize indices, coefficients
             self.data = AdaptData(
                 initial_energy,
                 self.pool,
+                self.ref_det,
                 self.sparse_ref_state,
                 self.file_name,
                 self.exact_energy,
                 self.n,
+                self.hamiltonian
             )
 
             self.indices = []
             self.coefficients = []
             self.old_coefficients = []
             self.old_gradients = []
+
         else:
+
+            self.state = self.compute_state()
+            initial_energy = self.evaluate_energy()
+            self.energy = initial_energy
+
             # Make sure the current energy is consistent with the energy of the ADAPT-VQE run we are continuing.
             # Sometimes there's a discrepancy because the PySCF Hamiltonian is not deterministic for some molecules
             # See https://github.com/pyscf/pyscf/issues/1935
@@ -3491,9 +3530,14 @@ class LinAlgAdapt(AdaptVQE):
         Store the provided hamiltonian as self.hamiltonian attribute after converting it to a sparse matrix.
 
         Arguments:
-            hamiltonian (InteractionOperator)
+            hamiltonian (Union[InteractionOperator,csc_matrix])
         """
-        self.hamiltonian = get_sparse_operator(hamiltonian, self.n)
+
+        if not issparse(hamiltonian):
+            hamiltonian = get_sparse_operator(hamiltonian, self.n)
+
+        self.hamiltonian = hamiltonian
+
 
     @property
     def name(self):

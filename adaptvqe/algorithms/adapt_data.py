@@ -215,7 +215,7 @@ class AdaptData:
     """
 
     def __init__(
-        self, initial_energy, pool, sparse_ref_state, file_name, fci_energy, n
+        self, initial_energy, pool, ref_det, sparse_ref_state, file_name, fci_energy, n, hamiltonian
     ):
         """
         Initialize class instance
@@ -223,10 +223,12 @@ class AdaptData:
         Arguments:
           initial_energy (float): energy of the reference state
           pool (list): operator pool
+          ref_det (list): the length n Slater determinant that will be used as the reference state
           sparse_ref_state (csc_matrix): the state to be used as the reference state (e.g. Hartree-Fock)
           file_name (str): a string describing the ADAPT implementation type and molecule
           fci_energy (float): the exact ground energy
-          n (int): the size of the system
+          n (int): the size of the system (number of qubits)
+          hamiltonian (csc_matrix): the Hamiltonian of the system
         """
 
         self.pool_name = pool.name
@@ -236,6 +238,7 @@ class AdaptData:
         # with the ansatz and energy in that iteration
         self.initial_energy = initial_energy
         self.initial_error = initial_energy - fci_energy
+        self.ref_det = ref_det
         self.sparse_ref_state = sparse_ref_state
 
         self.evolution = EvolutionData(initial_energy)
@@ -243,6 +246,7 @@ class AdaptData:
         self.iteration_counter = 0
         self.fci_energy = fci_energy
         self.n = n
+        self.hamiltonian = hamiltonian
 
         self.closed = False
         self.success = False
