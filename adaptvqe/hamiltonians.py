@@ -53,6 +53,7 @@ class HubbardHamiltonian:
         neel_state = ket_to_vector(neel_state_cb)
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
+        self.ref_det = neel_state_cb
 
         """
         # Use non interacting ground state instead of Néel as the reference state:
@@ -135,6 +136,7 @@ class XXZHamiltonian:
         neel_state = ket_to_vector(neel_state_cb)
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
+        self.ref_det = neel_state_cb
 
     def diagonalize_np(self):
         """
