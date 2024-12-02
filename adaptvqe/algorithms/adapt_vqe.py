@@ -295,6 +295,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.n = count_qubits(self.custom_hamiltonian.operator)
         self.file_name = f"{self.custom_hamiltonian.description}_{self.n}"
         self.sparse_ref_state = self.custom_hamiltonian.ref_state
+        self.ref_det = self.custom_hamiltonian.ref_state
         hamiltonian = self.custom_hamiltonian.operator
         self.exact_energy = self.custom_hamiltonian.ground_energy
 
