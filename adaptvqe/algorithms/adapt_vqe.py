@@ -124,7 +124,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.create_orb_rotation_ops()  # Create list of orbital rotation operators
         self.gradients = np.array(())
         self.orb_opt_dim = len(self.orb_ops)
-        self.detail_file_name()  # Create detailed file name including all options
+        if previous_data is None:
+            self.detail_file_name()  # Create detailed file name including all options
         self.energy_meas = self.observable_to_measurement(
             self.hamiltonian
         )  # Transform Hamiltonian into measurement
@@ -279,10 +280,13 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
         hamiltonian = self.data.hamiltonian
 
-        self.file_name = "_".join(self.data.file_name.split("_")[:2])
+
+        pre_it, post_it = self.data.file_name.split(str(self.data.iteration_counter) + "i")
+        self.file_name = "".join(
+            [pre_it, str(self.max_adapt_iter) + "i", post_it]
+        )
 
         self.exact_energy = self.data.fci_energy
-
         self.load(previous_data=self.data)
 
         return hamiltonian
@@ -338,20 +342,20 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         if previous_data is not None:
 
             self.data = deepcopy(previous_data)
-            self.file_name = self.data.file_name
+            self.data.file_name = self.file_name
 
             # Make sure we're continuing the run of ADAPT with the same settings
-            assert self.pool.name == self.data.pool_name
-            assert bool("rec_hess" in self.file_name) == self.recycle_hessian
-            assert bool("tetris" in self.file_name) == self.tetris
-            assert bool("prog" in self.file_name) == self.progressive_opt
-            assert bool("oopt" in self.file_name) == self.orb_opt
-            assert bool("1D" in self.file_name) == (not self.full_opt)
-            assert bool("pen_cnots" in  self.file_name) == self.penalize_cnots
+            assert self.pool.name == previous_data.pool_name
+            assert bool("rec_hess" in previous_data.file_name) == self.recycle_hessian
+            assert bool("tetris" in previous_data.file_name) == self.tetris
+            assert bool("prog" in previous_data.file_name) == self.progressive_opt
+            assert bool("oopt" in previous_data.file_name) == self.orb_opt
+            assert bool("1D" in previous_data.file_name) == (not self.full_opt)
+            assert bool("pen_cnots" in  previous_data.file_name) == self.penalize_cnots
             if self.candidates > 1:
-                assert str(self.candidates) in self.file_name
+                assert str(self.candidates) in previous_data.file_name
             if self.convergence_criterion != "total_g_norm":
-                assert str(self.convergence_criterion) in self.file_name
+                assert str(self.convergence_criterion) in previous_data.file_name
 
             # Set current state to the last iteration of the loaded data
             self.indices = self.data.evolution.indices[-1]
