@@ -314,7 +314,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         )
 
         if self.orb_opt:
-            self.file_name += "_oo"
+            self.file_name += "_oopt"
         if not self.full_opt:
             self.file_name += "_1D"
         if self.candidates > 1:
@@ -345,7 +345,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             assert bool("rec_hess" in self.file_name) == self.recycle_hessian
             assert bool("tetris" in self.file_name) == self.tetris
             assert bool("prog" in self.file_name) == self.progressive_opt
-            assert bool("oo" in self.file_name) == self.orb_opt
+            assert bool("oopt" in self.file_name) == self.orb_opt
             assert bool("1D" in self.file_name) == (not self.full_opt)
             assert bool("pen_cnots" in  self.file_name) == self.penalize_cnots
             if self.candidates > 1:
