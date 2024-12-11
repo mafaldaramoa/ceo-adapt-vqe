@@ -2711,11 +2711,13 @@ class LinAlgAdapt(AdaptVQE):
 
     def __init__(self, *args, **kvargs):
 
+        kvargs["pool"].imp_type = ImplementationType.SPARSE
+
         super().__init__(*args, **kvargs)
 
+        #self.pool.imp_type = ImplementationType.SPARSE
         self.state = self.sparse_ref_state
         self.ref_state = self.sparse_ref_state
-        self.pool.imp_type = ImplementationType.SPARSE
 
     def evaluate_observable(
         self,
