@@ -2715,7 +2715,6 @@ class LinAlgAdapt(AdaptVQE):
 
         super().__init__(*args, **kvargs)
 
-        #self.pool.imp_type = ImplementationType.SPARSE
         self.state = self.sparse_ref_state
         self.ref_state = self.sparse_ref_state
 
