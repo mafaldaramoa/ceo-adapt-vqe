@@ -222,7 +222,7 @@ class AdaptData:
 
         Arguments:
           initial_energy (float): energy of the reference state
-          pool (list): operator pool
+          pool (OperatorPool): operator pool
           ref_det (list): the length n Slater determinant that will be used as the reference state
           sparse_ref_state (csc_matrix): the state to be used as the reference state (e.g. Hartree-Fock)
           file_name (str): a string describing the ADAPT implementation type and molecule
@@ -233,7 +233,7 @@ class AdaptData:
 
         self.pool_name = pool.name
 
-        # The initial energy is stored apart from the remaining ones, so that the
+        # The initial energy is stored apart from the remaining ones, so that
         # the gradient norms in the beginning of an iteration are stored associated
         # with the ansatz and energy in that iteration
         self.initial_energy = initial_energy
@@ -270,15 +270,19 @@ class AdaptData:
         class at the end of each run.
 
         Arguments:
-          operator_index (int): index of the selected operator
-          energy (float): the optimized energy, at the end of the iteration
+          indices: indices of the ansatz elements at the end of the iteration
+          energy (float): energy at the end of the iteration
           gradient_norm (int): the norm of the total gradient norm at the beggining
             of this iteration
           prep_gradient_norm (int): same as above, but prepending instead of appending
-          selected_gradient (float): the absolute value of the gradient of the
-            operator that was added in this iteration
+          selected_gradients (float): the absolute values of the gradient of the
+            operators that were added in this iteration
           coefficients (list): a list of the coefficients selected by the optimizer
             in this iteration
+          inv_hessian (np.ndarray): the approximate inverse Hessian at the end of the
+            iteration
+          gradients (list): the gradients of the ansatz elements at the end of the
+            iteration
           nfevs (list): the number of function evaluations during the
           optimization. List length should match the number of optimizations
           ngevs (list): the number of evaluations of operator gradients during the
@@ -293,7 +297,7 @@ class AdaptData:
                 "Expected float, not {}.".format(type(gradient_norm).__name__)
             )
 
-        if prep_gradient_norm is not None and not isinstance(prep_gradient_norm, (float,np.float64)):
+        if prep_gradient_norm is not None and not isinstance(prep_gradient_norm, (float, np.float64)):
             raise TypeError(
                 "Expected float, not {}.".format(type(prep_gradient_norm).__name__)
             )
@@ -452,6 +456,7 @@ class AdaptData:
         Arguments:
           success (bool): True if the convergence condition was met, False if not
             (the maximum number of iterations was met before that)
+          file_name (str): the final file name to assume
         """
 
         self.result = self.evolution.last_it
@@ -459,6 +464,18 @@ class AdaptData:
         self.success = success
         if file_name is not None:
             self.file_name = file_name
+
+    def delete_hessians(self, preserve_last=True):
+        """
+        Delete the inverse Hessians stored from a run of ADAPT-VQE. By default, it keeps the last one, in case a new
+        instance of ADAPT-VQE will need the data.
+
+        Arguments:
+            preserve_last (bool): if to preserve the last inverse Hessian
+        """
+
+        for it_data in self.evolution.its_data[:-preserve_last]:
+            it_data.inv_hessian = None
 
     @property
     def current(self):
