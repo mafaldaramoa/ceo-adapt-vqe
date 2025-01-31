@@ -240,7 +240,7 @@ def create_unitary(coefficients,
 
     Arguments:
         coefficients (list): the coefficients of the exponentials
-        operators (list): the matrices representing the operators
+        operators (list): sparse matrices representing the operators
         n (int): the dimension
     """
 
