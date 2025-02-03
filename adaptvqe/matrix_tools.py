@@ -8,6 +8,8 @@ Created on Wed Jun 29 09:27:05 2022
 import numpy as np
 import scipy
 
+from math import log2
+
 from scipy.sparse.linalg import expm_multiply
 from scipy.sparse import csc_matrix
 
@@ -61,8 +63,25 @@ def vector_to_ket(state_vector, little_endian=False):
     """
 
     dim = len(state_vector)
-    ket = []
+    if log2(dim) - int(log2(dim)) > 10 ** -10:
+        raise ValueError("Statevector length is not a power of 2")
 
+    k = 0
+    for i, entry in enumerate(state_vector):
+        if entry < 10 ** -10:
+            state_vector[i] = 0
+        elif entry - 1 < 10 ** -10:
+            state_vector[i] = 1
+            k += 1
+        else:
+            raise ValueError("Statevector does not correspond to a computational"
+                             " basis state.")
+
+    if k != 1:
+        raise ValueError("Statevector does not correspond to a computational"
+                         " basis state.")
+
+    ket = []
     while dim > 1:
         if any(state_vector[i] for i in range(int(dim / 2))):
             # Ket is of the form |0>|...>.
