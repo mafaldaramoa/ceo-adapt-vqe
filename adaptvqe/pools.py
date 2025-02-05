@@ -30,7 +30,7 @@ from scipy.sparse import issparse, identity
 from .circuits import qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
-from .utils import get_operator_qubits, remove_z_string, tile
+from .utils import create_qes, get_operator_qubits, remove_z_string, tile
 
 
 class OpType:
@@ -344,7 +344,6 @@ class OperatorPool(metaclass=abc.ABCMeta):
         """
 
         if self.eig_decomp[index] is None:
-            print("Diagonalizing operator...")
             dense_op = self.get_imp_op(index).todense()
             # eigh is for Hermitian matrices, H is skew-Hermitian. Multiply -1j, undo later
             hermitian_op = -1j * dense_op
@@ -434,11 +433,11 @@ class OperatorPool(metaclass=abc.ABCMeta):
         """
         return self.operators[index].q_operator
 
-    def get_exp_op(self, index, coefficient=None):
+    def get_exp_op(self, index, coefficient=1):
         """
         Get exponential of operator labeled by index.
         """
-        if self.op_type == ImplementationType.SPARSE:
+        if self.imp_type == ImplementationType.SPARSE:
             return expm(coefficient * self.get_imp_op(index))
         else:
             raise ValueError
@@ -506,13 +505,12 @@ class OperatorPool(metaclass=abc.ABCMeta):
     def get_cnots(self, index):
         """
         Obtain number of CNOTs required in the circuit implementation of the operator labeled by index.
-        If index is a list, it must represent a MVP-CEO.
+        If index is a list, it must represent an MVP-CEO.
         """
 
-        if isinstance(index,list):
-
+        if isinstance(index, list):
             # Make sure all operators are qubit excitations acting on the same qubits. If they are, the number of CNOTs
-            #required in the circuit implementation is the same regardless of the number of operators
+            # required in the circuit implementation is the same regardless of the number of operators
             op_qubits = [self.get_qubits(i) for i in index]
             assert all(qubits == op_qubits[0] for qubits in op_qubits)
             assert all([i in self.parent_range for i in index])
@@ -572,7 +570,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         and pool operator indices.
         """
         circuit = self.get_circuit(coefficients, indices)
-        return cnot_depth(circuit.qasm())
+        return cnot_depth(circuit.qasm(), self.n)
 
     def depth(self, coefficients, indices):
         """
@@ -697,7 +695,7 @@ class GSD1(OperatorPool):
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
             qubit_operator = coefficient * self.operators[index].q_operator
-            qc = pauli_exp_circuit(qubit_operator, self.n, big_endian=True)
+            qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
@@ -790,7 +788,7 @@ class GSD(OperatorPool):
             index (int)
         """
         if self.eig_decomp[index] is not None:
-            return super().expm(index, coefficient)
+            return super().expm(coefficient, index)
 
         op = self.get_imp_op(index)
         n, n = op.shape
@@ -814,7 +812,7 @@ class GSD(OperatorPool):
         if self.eig_decomp[index] is not None:
             return super().expm_mult(coefficient, index, other)
         '''
-        exp_op = self.expm(index,coefficient)
+        exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
         # It's faster to do product first, then sums; this way we never do matrix-matrix operations, just matrix-vector
@@ -822,7 +820,7 @@ class GSD(OperatorPool):
         m = op.dot(other)
 
         # In the following we can use self.square(index).dot(ket) instead of op.dot(m). But that's actually slightly
-        # slower even if self.square(index) was already stored and we don't have to calculate it
+        # slower even if self.square(index) was already stored so we don't have to calculate it
         m = other + np.sin(coefficient) * m + (1 - np.cos(coefficient)) * op.dot(m)
 
         return m
@@ -840,12 +838,49 @@ class GSD(OperatorPool):
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
             qubit_operator = coefficient * self.operators[index].q_operator
-            qc = pauli_exp_circuit(qubit_operator, self.n, big_endian=True)
+            qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
 
         return circuit
+
+class PairedGSD(GSD):
+    """
+    Generalized single and double excitations, where the doubles are restricted to moving electrons from one spatial
+    orbital to another.
+    Repeated indices (e.g. 0^ 3^ 0 5) are NOT allowed.
+    See https://pubs.acs.org/doi/epdf/10.1021/acs.jctc.8b01004?ref=article_openPDF
+    """
+
+    name = "paired_gsd"
+
+    def create_operators(self):
+        """
+        Create pool operators and insert them into self.operators (list).
+        """
+
+        self.create_singles()
+        self.create_doubles()
+
+    def create_doubles(self):
+        """
+        Create two-body paired GSD operators.
+        """
+
+        n_spatial = int(self.n/2)
+
+        for a in range(n_spatial):
+
+            for b in range(a+1, n_spatial):
+
+                a_alpha = 2*a
+                a_beta = 2*a + 1
+                b_alpha = 2*b
+                b_beta = 2*b + 1
+
+                self.add_operator(FermionOperator(((a_alpha, 1), (a_beta, 1), (b_alpha, 0), (b_beta, 0))),
+                                  source_orbs=[b_alpha,b_beta], target_orbs=[a_alpha,a_beta])
 
 
 class SD(OperatorPool):
@@ -913,7 +948,7 @@ class SD(OperatorPool):
             index (int)
         """
         if self.eig_decomp[index] is not None:
-            return super().expm(index, coefficient)
+            return super().expm(coefficient, index)
         op = self.get_imp_op(index)
         n, n = op.shape
         exp_op = identity(n) + np.sin(coefficient) * op + (1 - np.cos(coefficient)) * self.square(index)
@@ -935,14 +970,14 @@ class SD(OperatorPool):
         if self.eig_decomp[index] is not None:
             return super().expm_mult(coefficient, index, other)
         '''
-        exp_op = self.expm(index,coefficient)
+        exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
         # It's faster to do product first, then sums; this way we never do matrix-matrix operations, just matrix-vector
         op = self.get_imp_op(index)
         m = op.dot(other)
         # In the following we can use self.square(index).dot(ket) instead of op.dot(m). But that's actually slightly
-        # slower even if self.square(index) was already stored and we don't have to calculate it
+        # slower even if self.square(index) was already stored so we don't have to calculate it
         m = other + np.sin(coefficient) * m + (1 - np.cos(coefficient)) * op.dot(m)
 
         return m
@@ -960,7 +995,7 @@ class SD(OperatorPool):
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
             qubit_operator = coefficient * self.operators[index].q_operator
-            qc = pauli_exp_circuit(qubit_operator, self.n, big_endian=True)
+            qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
@@ -1209,7 +1244,7 @@ class PauliPool(SingletGSD):
             index (int)
         """
         if self.eig_decomp[index] is not None:
-            return super().expm(index, coefficient)
+            return super().expm(coefficient, index)
         op = self.get_imp_op(index)
         n, n = op.shape
         exp_op = np.cos(coefficient) * identity(n) + np.sin(coefficient) * op
@@ -1231,7 +1266,7 @@ class PauliPool(SingletGSD):
         if self.eig_decomp[index] is not None:
             return super().expm_mult(coefficient, index, other)
         '''
-        exp_op = self.expm(index,coefficient)
+        exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
         # It's faster to do product first, then sums; this way we never do
@@ -1769,77 +1804,17 @@ class QE(OperatorPool):
                         if (p + q + r + s) % 2 != 0:
                             continue
 
-                        # If aaaa or bbbb, all three of the following ifs apply, but there are only 3 distinct operators
-                        # In the other cases, only one of the ifs applies, 2 distinct operators
-
                         new_positions = []
-                        if (p + r) % 2 == 0:
-                            # pqrs is abab or baba, or aaaa or bbbb
 
-                            f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-                            f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
+                        q_operators, orbs = create_qes(p,q,r,s)
 
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
+                        for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
 
                             pos1 = self.add_operator(q_operator_1, cnots=13, cnot_depth=11,
-                                                     source_orbs=[r, s], target_orbs=[p, q])
+                                                     source_orbs=source_orbs[0], target_orbs=target_orbs[0])
 
                             pos2 = self.add_operator(q_operator_2, cnots=13, cnot_depth=11,
-                                                     source_orbs=[p, s], target_orbs=[q, r])
-
-                            new_positions += [pos1, pos2]
-
-                        if (p + q) % 2 == 0:
-                            # aabb or bbaa, or aaaa or bbbb
-
-                            f_operator_1 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
-                            f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
-
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
-
-                            pos1 = self.add_operator(q_operator_1, cnots=13, cnot_depth=11,
-                                                     source_orbs=[q, s], target_orbs=[p, r])
-
-                            pos2 = self.add_operator(q_operator_2, cnots=13, cnot_depth=11,
-                                                     source_orbs=[p, s], target_orbs=[q, r])
-
-                            new_positions += [pos1, pos2]
-
-                        if (p + s) % 2 == 0:
-                            # abba or baab, or aaaa or bbbb
-
-                            f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-                            # f_operator_2 = FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0)))
-                            f_operator_2 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
-
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
-
-                            pos1 = self.add_operator(q_operator_1, cnots=13, cnot_depth=11,
-                                                     source_orbs=[r, s], target_orbs=[p, q])
-
-                            pos2 = self.add_operator(q_operator_2, cnots=13, cnot_depth=11,
-                                                     source_orbs=[q, s], target_orbs=[p, r])
+                                                     source_orbs=source_orbs[1], target_orbs=target_orbs[1])
 
                             new_positions += [pos1, pos2]
 
@@ -1866,7 +1841,7 @@ class QE(OperatorPool):
             index (int)
         """
         if self.eig_decomp[index] is not None:
-            return super().expm(index, coefficient)
+            return super().expm(coefficient, index)
         op = self.get_imp_op(index)
         n, n = op.shape
         exp_op = identity(n) + np.sin(coefficient) * op + (1 - np.cos(coefficient)) * self.square(index)
@@ -1888,14 +1863,14 @@ class QE(OperatorPool):
         if self.eig_decomp[index] is not None:
             return super().expm_mult(coefficient, index, other)
         '''
-        exp_op = self.expm(index,coefficient)
+        exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
         # It's faster to do product first, then sums; this way we never do matrix-matrix operations, just matrix-vector
         op = self.get_imp_op(index)
         m = op.dot(other)
         # In the following we can use self.square(index).dot(ket) instead of op.dot(m). But that's actually slightly
-        # slower even if self.square(index) was already stored and we don't have to calculate it
+        # slower even if self.square(index) was already stored so we don't have to calculate it
         m = other + np.sin(coefficient) * m + (1 - np.cos(coefficient)) * op.dot(m)
 
         return m
@@ -2007,7 +1982,8 @@ class CEO(OperatorPool):
                  diff=True,
                  dvg=False,
                  dve=False,
-                 n=None):
+                 n=None,
+                 source_ops=None):
         """
         Arguments:
             molecule (PyscfMolecularData): the molecule for which we will use the pool
@@ -2018,6 +1994,7 @@ class CEO(OperatorPool):
             n (int): number of qubits the operator acts on. Note that this includes identity operators - it's dependent
             on system size, not operator support
         """
+
         # We define the algorithm to start each iteration by selecting one OVP-CEO, thus there have to be such operators
         # in the pool.
         assert sum or diff
@@ -2037,7 +2014,7 @@ class CEO(OperatorPool):
             self.parent_pool = QE(molecule, n=n)
         self.track_parents = track_parents
 
-        super().__init__(molecule, n=n)
+        super().__init__(molecule, n=n, source_ops=source_ops)
 
         if not diff:
             self.name += "_sum"
@@ -2050,8 +2027,13 @@ class CEO(OperatorPool):
         """
 
         if self.track_parents:
+            # Append all parent pool (QE) operators to self. Note that these include singles. They don't
+            #yield any linear combination of operators, because there is at most one single per pair of
+            #spin-orbitals. Singles belong to the pool independently and individually.
             self.operators = copy(self.parent_pool.operators)
-        self.create_singles()
+        else:
+            self.create_singles()
+
         self.create_doubles()
 
     def create_singles(self):
@@ -2069,11 +2051,8 @@ class CEO(OperatorPool):
                     f_operator = normal_ordered(f_operator)
 
                     q_operator = remove_z_string(f_operator)
-                    if self.track_parents:
-                        parents = self.parent_pool.get_ops_on_qubits([p, q])
-                    else:
-                        parents = None
-                    self.add_operator(q_operator, cnots=2, cnot_depth=2, parents=parents, source_orbs=[q],
+
+                    self.add_operator(q_operator, cnots=2, cnot_depth=2, source_orbs=[q],
                                       target_orbs=[p])
 
     def create_doubles(self):
@@ -2096,84 +2075,20 @@ class CEO(OperatorPool):
                             parents = self.parent_pool.get_ops_on_qubits([p, q, r, s])
                         else:
                             parents = None
-                        if (p + r) % 2 == 0:
-                            # pqrs is abab or baba, or aaaa or bbbb
 
-                            f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-                            # f_operator_2 = FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0)))
-                            f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
+                        q_operators, orbs = create_qes(p,q,r,s)
 
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
+                        for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators,orbs):
 
                             if self.sum:
                                 self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[r, s], [p, s]], target_orbs=[[p, q], [q, r]],
+                                                  source_orbs=source_orbs, target_orbs=target_orbs,
                                                   ceo_type="sum")
                             if self.diff:
                                 self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[r, s], [p, s]], target_orbs=[[p, q], [q, r]],
+                                                  source_orbs=source_orbs, target_orbs=target_orbs,
                                                   ceo_type="diff")
 
-                        if (p + q) % 2 == 0:
-                            # aabb or bbaa, or aaaa or bbbb
-
-                            # f_operator_1 = FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0)))
-                            f_operator_1 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
-                            # f_operator_2 = FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0)))
-                            f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
-
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
-
-                            if self.sum:
-                                self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[q, s], [p, s]], target_orbs=[[p, r], [q, r]],
-                                                  ceo_type="sum")
-                            if self.diff:
-                                self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[q, s], [p, s]], target_orbs=[[p, r], [q, r]],
-                                                  ceo_type="diff")
-
-                        if (p + s) % 2 == 0:
-                            # abba or baab, or aaaa or bbbb
-
-                            f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-                            # f_operator_2 = FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0)))
-                            f_operator_2 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
-
-                            f_operator_1 -= hermitian_conjugated(f_operator_1)
-                            f_operator_2 -= hermitian_conjugated(f_operator_2)
-
-                            f_operator_1 = normal_ordered(f_operator_1)
-                            f_operator_2 = normal_ordered(f_operator_2)
-
-                            q_operator_1 = remove_z_string(f_operator_1)
-                            q_operator_2 = remove_z_string(f_operator_2)
-
-                            if self.sum:
-                                self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[r, s], [q, s]], target_orbs=[[p, q], [p, r]],
-                                                  ceo_type="sum")
-                            if self.diff:
-                                self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=[[r, s], [q, s]], target_orbs=[[p, q], [p, r]],
-                                                  ceo_type="diff")
-
-                        # If aaaa or bbbb, all ifs apply, 6 distinct operators
-                        # In the other cases, only one of the ifs applies, 2 distinct operators
 
     @property
     def op_type(self):
@@ -2191,7 +2106,7 @@ class CEO(OperatorPool):
             index (int)
         """
         if self.eig_decomp[index] is not None:
-            return super().expm(index, coefficient)
+            return super().expm(coefficient, index)
         op = self.get_imp_op(index)
         n, n = op.shape
         exp_op = identity(n) + np.sin(coefficient) * op + (1 - np.cos(coefficient)) * self.square(index)
@@ -2213,14 +2128,14 @@ class CEO(OperatorPool):
         if self.eig_decomp[index] is not None:
             return super().expm_mult(coefficient, index, other)
         '''
-        exp_op = self.expm(index,coefficient)
+        exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
         # It's faster to do product first, then sums; this way we never do matrix-matrix operations, just matrix-vector
         op = self.get_imp_op(index)
         m = op.dot(other)
         # In the following we can use self.square(index).dot(ket) instead of op.dot(m). But that's actually slightly
-        # slower even if self.square(index) was already stored and we don't have to calculate it
+        # slower even if self.square(index) was already stored so we don't have to calculate it
         m = other + np.sin(coefficient) * m + (1 - np.cos(coefficient)) * op.dot(m)
 
         return m
@@ -2445,6 +2360,7 @@ class MVP_CEO(QE):
 
         return circuit
 
+
 class FullPauliPool(PauliPool):
     """
     Pool consisting of all possible Pauli strings of suitable dimension. 4^N elements, where N is the number of qubits.
@@ -2501,3 +2417,128 @@ class TiledQEPool(QE):
             for tiled_op in tiled_ops:
                 length = count_qubits(tiled_op)
                 self.add_operator(tiled_op, cnots=length * 2 - 2, cnot_depth=length * 2 - 2)
+
+class TiledCEO(CEO):
+    """
+    Pool of coupled exchange operators. These operators are linear combinations of qubit excitations. Might be sum,
+    difference, or have independent variational parameters.
+    CEOs with multiple variational parameters (MVP-CEOs) are not included in this class and must be created using the
+    specific MVP_CEO class which inherits from QE. Mixed CEOs, where we decide between using one or multiple variational
+    parameters based on the gradients (DVG) or energy (DVE), are contemplated in this class for specific values of class
+    constructor arguments. However, they can also be created straightforwardly using the specific classes DVG_CEO and
+    DVE_CEO.
+    Note that the construction of MVP-CEOs is done on AdaptVQE class. Pool operators here are OVP-CEOs, plus a
+    "parent pool" of qubit excitations if we are considering DVG-/DVE-CEOs. In that case, we keep track of which QEs
+    appear in each OVP-CEO (which is a linear combination of 4 Pauli strings) in order to have the MVP-CEO acting on the
+    same indices readily available.
+    """
+
+    name = "tiled_CEO"
+
+    def create_operators(self):
+
+        source_singles = []
+        source_doubles = []
+        for op in self.source_ops:
+
+            op_qubits = get_operator_qubits(op)
+            n_qubits = len(op_qubits)
+
+            if max(op_qubits) > self.n-1:
+                raise ValueError(f"Operators to be tiled must act on at most {self.n} qubits.")
+            if n_qubits == 2:
+                source_singles.append(op)
+            else:
+                source_doubles.append(op)
+
+        offsets = []
+        for double in source_doubles:
+            qubits = get_operator_qubits(double)
+            qubits = [qubit - list(qubits)[0] for qubit in qubits]
+            if qubits not in offsets:
+                offsets.append(qubits)
+
+        old_qubits = []
+        if self.track_parents:
+            for op in self.parent_pool.operators:
+                qubits = list(get_operator_qubits(op.operator))
+                keep = (len(qubits) == 2)
+                for offset_list in offsets:
+                    offset_list = [offset + qubits[0] for offset in offset_list]
+                if offset_list == qubits:
+                    keep = True
+                print("HERE",qubits,keep)
+                if keep:
+                    pos = self.add_operator(op.operator, cnots=13, cnot_depth=11,
+                                            source_orbs=op.source_orbs, target_orbs=op.target_orbs)
+                    if old_qubits != qubits:
+                        self._ops_on_qubits[str(qubits)] = [pos]
+                    else:
+                        self._ops_on_qubits[str(qubits)].append(pos)
+                old_qubits = qubits
+
+        self.parent_pool.operators = self.operators
+        self.parent_pool._ops_on_qubits = self._ops_on_qubits
+        """for i, op in enumerate(self.operators):
+            qubits = list(get_operator_qubits(op.operator))
+            keep = (len(qubits) == 2)
+            for offset_list in offsets:
+                offset_list = [offset + qubits[0] for offset in offset_list]
+            if offset_list == qubits:
+                keep = True
+
+            print("HERE",qubits,keep)
+            if not keep:
+                print(self.operators[i])
+                self.operators.pop(i)
+                print("New", self.operators[i])
+                self.parent._ops_on_qubits[str(qubits)] = []"""
+
+
+        self.create_singles(source_singles)
+        self.create_doubles(source_doubles,offsets)
+    def create_singles(self,source_singles):
+
+        source_n = max([count_qubits(op) for op in self.source_ops])
+
+        for op in source_singles:
+
+            tiled_ops = tile(op, source_n, self.n)
+
+            for tiled_op in tiled_ops:
+                length = count_qubits(tiled_op)
+                self.add_operator(tiled_op, cnots=length * 2 - 2, cnot_depth=length * 2 - 2)
+
+    def create_doubles(self, source_doubles, offsets):
+        """
+        Create one-body CEOs.
+        """
+
+        for offset_list in offsets:
+            for p in range(0, self.n-offset_list[-1]):
+                q, r, s = [p + offset for offset in offset_list[1:]]
+
+
+        for offset_list in offsets:
+            for p in range(0, self.n-offset_list[-1]):
+                q, r, s = [p + offset for offset in offset_list[1:]]
+
+                q_operators, orbs = create_qes(p,q,r,s)
+
+                for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
+
+                    if self.track_parents:
+                        parents = self.parent_pool.get_ops_on_qubits([p, q, r, s])
+                    else:
+                        parents = None
+
+                    if self.sum:
+                        print("Size: ",self.size)
+                        self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, parents=parents,
+                                          source_orbs=source_orbs, target_orbs=target_orbs,
+                                          ceo_type="sum")
+                    if self.diff:
+                        print("Size: ",self.size)
+                        self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
+                                          source_orbs=source_orbs, target_orbs=target_orbs,
+                                          ceo_type="diff")
