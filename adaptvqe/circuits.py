@@ -6,6 +6,7 @@ from qiskit import QuantumCircuit
 from qiskit.circuit.library import RYGate
 
 from .op_conv import convert_hamiltonian, read_of_qubit_operator
+from .utils import swap
 
 
 def cnot_depth(qasm, n):
@@ -34,11 +35,19 @@ def cnot_depth(qasm, n):
         if op[:2] != "cx":
             continue
 
-        # Next elements are qubits
-        qubits = [
-            int(re.search(r"[0-9]+", qubit_string).group())
-            for qubit_string in line_elems[1:]
-        ]
+        # Next element is qubits
+        # Depending on the QASM version, we may have qubits in the same entry or separate ones
+        if len(line_elems) == 2:
+            qubits = [int(qubit) for qubit in re.findall(r"[0-9]+",line_elems[1])]
+        elif len(line_elems) == 3:
+            qubits = [
+                int(re.search(r"[0-9]+", qubit_string).group())
+                for qubit_string in line_elems[1:]
+            ]
+        else:
+            raise ValueError
+
+        assert len(qubits) == 2
 
         max_depth = max([depths[qubit] for qubit in qubits])
         new_depth = max_depth + 1
@@ -490,3 +499,55 @@ def ovp_ceo_cr_circuit(source_orbs, target_orbs, n, theta, ceo_type, big_endian=
     qc.cx(c, d)
 
     return qc
+
+def paired_f_swap_network_orderings(n):
+    """
+    Finds the list of spin-orbital orderings at each step of a fermionic swap
+    network for a  UpCCGSD circuit. Note that since fermionic swaps are used,
+    this effectively swaps spin-orbitals, not just qubits - anticommutation
+    effects are taken into account.
+    It is assumed that orbitals 1a, 1b, 2a, 2b,... are labeled as 0, 1, 2, 3,...
+    See Fig. 7 of https://arxiv.org/pdf/1905.05118
+
+    Arguments:
+        n (int): the number of qubits/spin-orbitals
+
+    Returns:
+        orders: a list of lists of length n representing spin-orbital
+            orderings. The first/last lists are the initial/final orderings.
+    """
+
+    if (n/2)%2 != 0:
+        # Not sure how the authors define the initial ordering for an odd number of spatial orbitals?
+        raise NotImplementedError
+
+    orders = []
+
+    # Create initial ordering
+    order = [None for _ in range(n)]
+    for spatial_orb in range(0,int(n/2),2):
+        # We place two alpha orbitals from subsequent spatial orbitals, then
+        #the two beta counterparts
+        order[spatial_orb*2] = spatial_orb*2
+        order[spatial_orb*2+1] = (spatial_orb + 1)*2
+        order[spatial_orb*2+2] = spatial_orb*2 + 1
+        order[spatial_orb*2+3] = (spatial_orb + 1)*2 + 1
+
+    orders.append(order.copy())
+
+    # The overall effect of the network is to reverse the ordering
+    final_order = order[::-1]
+
+    while order != final_order:
+
+        # Apply layer of even-odd fermionic swaps
+        for i in range(0,n-1,2):
+            swap(order,i,i+1)
+        orders.append(order.copy())
+
+        # Apply layer of odd-even fermionic swaps
+        for i in range(1,n-1,2):
+            swap(order,i,i+1)
+        orders.append(order.copy())
+
+    return orders
