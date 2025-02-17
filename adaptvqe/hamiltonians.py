@@ -49,7 +49,8 @@ class HubbardHamiltonian:
 
         self._ground_energy = None
         self._ground_state = None
-        neel_state_cb = [0, 1, 1, 0] * (y_dim // 2) + [0, 1] * (y_dim % 2)
+        dim = y_dim * x_dim
+        neel_state_cb = [0, 1, 1, 0] * (dim // 2) + [0, 1] * (dim % 2)
         neel_state = ket_to_vector(neel_state_cb)
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state

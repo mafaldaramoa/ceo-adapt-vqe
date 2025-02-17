@@ -359,3 +359,101 @@ def create_qes(p, q, r, s):
         orbs.append([source_orbs, target_orbs])
 
     return q_operators, orbs
+
+
+def swap(l,i,j):
+    """
+    Swaps two elements in a list
+
+    Arguments:
+        l (list): the list:
+        i (int): index of one element to be swapped
+        j (int): index of the other element to be swapped
+
+    Returns:
+        l (list): the modified list. This is not a copy.
+    """
+    temp = l[i]
+    l[i] = l[j]
+    l[j] = temp
+    return l
+
+def find_lnn_singles(spin_orb_order):
+    """
+    Given a spin-orbital ordering, outputs the indices of (spin preserving)
+    single excitations acting on 2 adjacent qubits.
+
+    Arguments:
+        spin_orb_order (list): the ordered list of spin-orbital indices. Even/odd
+            indices are assumed to correspond to alpha/beta orbitals
+
+    Returns:
+        single_indices (list): a list of ordered lists of 2 indices that are
+            adjacent in the input list and correspond to the same type of
+            spin-orbital (i.e. same parity)
+    """
+    single_indices = []
+    for i in range(len(spin_orb_order)-1):
+        a,b = sorted(spin_orb_order[i:i+2])
+        if a%2 == b%2:
+            single_indices.append([a,b])
+
+    return single_indices
+
+def find_lnn_paired_doubles(spin_orb_order):
+    """
+    Given a spin-orbital ordering, outputs the indices of total spin preserving
+    double excitations acting on 4 adjacent qubits
+
+    Arguments:
+        spin_orb_order (list): the ordered list of spin-orbital indices. Even/odd
+            indices are assumed to correspond to alpha/beta orbitals
+
+    Returns:
+        double_indices (list): a list of ordered lists of 4 indices that are
+            adjacent in the input list and correspond to two pairs of orbitals
+            with the same spatial part
+    """
+    double_indices = []
+    for i in range(len(spin_orb_order)-3):
+        a,b,c,d = sorted(spin_orb_order[i:i+4])
+        if a%2 == 0 and c%2 == 0 and a+1==b and c+1==d:
+            # a,b and c,d are each a pair of alpha, beta spin-orbitals with the
+            #same spatial part
+            double_indices.append([a,b,c,d])
+
+    return double_indices
+
+def find_spin_preserving_exc_indices(order_list):
+    """
+    Given a list of spin-orbital orderings, outputs a list of the corresponding
+    indices of single and paired double excitations that can be executed
+    assuming we have a LNN architecture. The order of the output list is the
+    order in which the excitations would appear in a circuit described by the
+    successive orderings. The list of orderings may represent e.g. a swap
+    network.
+
+    Arguments:
+        order_list (list): list of lists, each of which represents an ordering
+            of spin-orbital indices. Even/odd indices are assumed to correspond
+            to alpha/beta orbitals
+
+    Returns:
+        double_indices (list): a list of ordered lists of 4 indices that are
+            adjacent in the input list and correspond to two pairs of orbitals
+            with the same spatial part
+    """
+
+    excitation_indices = []
+
+    for order in order_list:
+
+        for double_exc in find_lnn_paired_doubles(order):
+            if double_exc not in excitation_indices:
+                excitation_indices.append(double_exc)
+
+        for single_exc in  find_lnn_singles(order):
+            if single_exc not in excitation_indices:
+                excitation_indices.append(single_exc)
+
+    return excitation_indices

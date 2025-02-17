@@ -27,10 +27,11 @@ from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
-from .circuits import qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count
+from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count,
+                       paired_f_swap_network_orderings)
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
-from .utils import create_qes, get_operator_qubits, remove_z_string, tile
+from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
 
 
 class OpType:
@@ -502,6 +503,19 @@ class OperatorPool(metaclass=abc.ABCMeta):
             m = m.real
             return m
 
+    def adj_expm_mult(self, coefficient, index, other):
+        """
+        Same as expm_multiply, but for left multiplication:
+        other * e^(-operator*coefficient)
+        """
+
+        m = self.expm_mult(coefficient,
+                           index,
+                           other.transpose().conj()
+                           ).transpose().conj()
+
+        return m
+
     def get_cnots(self, index):
         """
         Obtain number of CNOTs required in the circuit implementation of the operator labeled by index.
@@ -855,14 +869,6 @@ class PairedGSD(GSD):
 
     name = "paired_gsd"
 
-    def create_operators(self):
-        """
-        Create pool operators and insert them into self.operators (list).
-        """
-
-        self.create_singles()
-        self.create_doubles()
-
     def create_doubles(self):
         """
         Create two-body paired GSD operators.
@@ -881,6 +887,33 @@ class PairedGSD(GSD):
 
                 self.add_operator(FermionOperator(((a_alpha, 1), (a_beta, 1), (b_alpha, 0), (b_beta, 0))),
                                   source_orbs=[b_alpha,b_beta], target_orbs=[a_alpha,a_beta])
+
+
+class PairedGSD_SwapNet(GSD):
+    """
+    Same as PairedGSD, except the excitations appear in the order they are implemented using fermionic swap networks.
+    See https://arxiv.org/pdf/1905.05118
+    """
+
+    name = "swapnet_pgsd"
+
+    def create_operators(self):
+        """
+        Create two-body paired GSD operators.
+        """
+
+        orderings = paired_f_swap_network_orderings(self.n)
+        exc_indices_list = find_spin_preserving_exc_indices(orderings)
+        for exc_indices in exc_indices_list:
+            if len(exc_indices) == 4:
+                a, b, c, d = exc_indices
+                self.add_operator(FermionOperator(((a, 1), (b, 1), (c, 0), (d, 0))),
+                                  source_orbs=[c, d], target_orbs=[a, b])
+            elif len(exc_indices) == 2:
+                a, b = exc_indices
+                self.add_operator(FermionOperator(((a, 1), (b, 0))),
+                                  source_orbs=[b], target_orbs=[a])
+
 
 
 class SD(OperatorPool):
@@ -2497,6 +2530,7 @@ class TiledCEO(CEO):
 
         self.create_singles(source_singles)
         self.create_doubles(source_doubles,offsets)
+
     def create_singles(self,source_singles):
 
         source_n = max([count_qubits(op) for op in self.source_ops])
