@@ -89,6 +89,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 criterion will be divided by the number of CNOTs in the circuit implementation of the operator
             rand_degenerate (bool): Whether to select randomly among operators with identical gradients (difference
                 below 10**-8). If False, the largest gradient is decided by the ">" operator.
+            shots (int): the number of shots to use in the energy evaluations
             frozen_orbitals (list): Indices of orbitals that are considered to be permanently occupied. Note that
                 virtual orbitals are not yet implemented.
             previous_data (AdaptData): data from a previous run of ADAPT we wish to continue
@@ -2715,6 +2716,9 @@ class LinAlgAdapt(AdaptVQE):
 
         super().__init__(*args, **kvargs)
 
+        if self.shots:
+            raise ValueError("Finite number of shots not compatible with LinAlgAdapt class.")
+
         self.state = self.sparse_ref_state
         self.ref_state = self.sparse_ref_state
 
@@ -3598,6 +3602,7 @@ class SampledLinAlgAdapt(LinAlgAdapt):
     def __init__(self, *args, **kvargs):
 
         super().__init__(*args, **kvargs)
+
         assert self.pool.name == "no_z_pauli_pool"
         assert not self.orb_opt
 
