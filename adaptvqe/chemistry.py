@@ -79,3 +79,18 @@ def create_spin_adapted_one_body_op(p, q):
     op = normalize_op(op)
 
     return op
+
+def convert_orbital_index(i,n):
+    """
+    Converts the index of a spin-orbital
+    From: all-alpha then all-beta (e.g. Qiskit)
+    To: alternating alpha/beta (e.g. Openfermion)
+
+    Arguments:
+        i (int): original index in all-alpha then all-beta ordering
+        n (int): total number of qubits
+    """
+    if i >= n/2:
+        return int(1 + 2*(i - n/2))
+    else:
+        return int(2*i)
