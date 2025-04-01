@@ -9,16 +9,16 @@ from .op_conv import convert_hamiltonian, read_of_qubit_operator
 from .utils import swap, appears_in
 
 
-def cnot_depth(qasm, n):
+def get_gate_depth(qasm, n, gate_name):
     """
-    Counts the depth of a circuit on n qubits represented by a QASM string, considering only cx gates.
-    Circuit must be decomposed into a cx + single qubit rotations gate set.
+    Counts the depth of a circuit on n qubits represented by a QASM string, considering only a particular type of
+    two-qubit gates. All other gates are ignored.
 
     Aguments:
         qasm (str): the QASM representation of the circuit
         n (int): the number of qubits
     Returns:
-        The CNOT depth of the circuit
+        The depth of the circuit, in terms of this type of gates
     """
     # n = int(re.search(r"(?<=q\[)[0-9]+(?=\])", qasm.splitlines()[2]).group())
     depths = [0 for _ in range(n)]
@@ -32,7 +32,7 @@ def cnot_depth(qasm, n):
 
         # First element is operation type
         op = line_elems[0]
-        if op[:2] != "cx":
+        if op[:2] != gate_name:
             continue
 
         # Next element is qubits
@@ -57,10 +57,18 @@ def cnot_depth(qasm, n):
 
     return max(depths)
 
+def cnot_depth(qasm,n):
+    return get_gate_depth(qasm,n,"cx")
 
-def cnot_count(qasm):
+def ecr_depth(qasm,n):
+    return get_gate_depth(qasm,n,"ecr")
+
+def cz_depth(qasm,n):
+    return get_gate_depth(qasm,n,"cz")
+
+def count_gates(qasm,gate_name):
     """
-    Counts the CNOTs in a circuit represented by a QASM string.
+    Counts the number of gates of a particular type in a circuit represented by a QASM string.
     """
     count = 0
 
@@ -70,10 +78,31 @@ def cnot_count(qasm):
         line_elems = line.split(" ")
         op = line_elems[0]
 
-        if op[:2] == "cx":
+        if op[:2] == gate_name:
             count += 1
 
     return count
+
+def cnot_count(qasm):
+    """
+    Counts the CNOTs in a circuit represented by a QASM string.
+    """
+
+    return count_gates(qasm,"cx")
+
+def ecr_count(qasm):
+    """
+    Counts the ECR gates in a circuit represented by a QASM string.
+    """
+
+    return count_gates(qasm,"ecr")
+
+def cz_count(qasm):
+    """
+    Counts the ECR gates in a circuit represented by a QASM string.
+    """
+
+    return count_gates(qasm,"cz")
 
 
 def qe_circuit(source_orbs, target_orbs, theta, n, big_endian=False):
