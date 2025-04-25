@@ -457,3 +457,15 @@ def find_spin_preserving_exc_indices(order_list):
                 excitation_indices.append(single_exc)
 
     return excitation_indices
+
+def appears_in(list1,list2):
+    """
+    Checks if list1 appears in list2 (all elements together)
+    """
+
+    cutoff = len(list2) - len(list1) + 1
+    for i in range(cutoff):
+        if list2[i:i+len(list1)] == list1:
+            return True
+
+    return False

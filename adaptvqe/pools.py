@@ -28,10 +28,11 @@ from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
 from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count,
-                       paired_f_swap_network_orderings)
+                       paired_f_swap_network_orderings, prepare_lnn_op, count_qe_lnn_swaps)
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
 from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
+
 
 
 class OpType:
@@ -516,10 +517,16 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         return m
 
-    def get_cnots(self, index):
+    def get_cnots(self, index, qubit_order=None, lnn=False):
         """
         Obtain number of CNOTs required in the circuit implementation of the operator labeled by index.
         If index is a list, it must represent an MVP-CEO.
+
+    Arguments:
+        index (int): index of pool operator
+        qubit_order (list): the mapping of physical qubits to logical qubits. qubit_order[i]=j means that physical qubit
+            i represents logical qubit j.
+        lnn (bool): whether connectivity is restricted to LNN.
         """
 
         if isinstance(index, list):
@@ -530,7 +537,17 @@ class OperatorPool(metaclass=abc.ABCMeta):
             assert all([i in self.parent_range for i in index])
             index = index[0]
 
-        return self.operators[index].cnots
+        cnots = self.operators[index].cnots
+
+        if qubit_order is not None:
+            logical_qubits = self.get_qubits(index)
+            physical_qubits = [qubit_order.index(q) for q in logical_qubits]
+            physical_qubits2 = prepare_lnn_op(physical_qubits)
+            n_swaps = count_qe_lnn_swaps(physical_qubits, physical_qubits2)
+            n_routing_cnots = 3 * n_swaps
+            cnots = cnots + n_routing_cnots
+
+        return cnots
 
     def get_cnot_depth(self, index):
         """

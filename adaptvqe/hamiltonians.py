@@ -20,7 +20,6 @@ from openfermion import (
 
 from .matrix_tools import ket_to_vector
 
-
 class HubbardHamiltonian:
     """
     Class for Hubbard Hamiltonians.
