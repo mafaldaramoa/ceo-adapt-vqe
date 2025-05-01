@@ -266,7 +266,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         return text
 
     def add_operator(self, new_operator, cnots=None, cnot_depth=None, parents=None, source_orbs=None, target_orbs=None,
-                     ceo_type=None):
+                     ceo_type=None, check_for_repeats=True):
         """
         Arguments:
             new_operator (Union[PoolOperator,FermionOperator,QubitOperator]): operator to add to pool
@@ -277,6 +277,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
             source_orbs (list): spin-orbitals from which the operator removes fermions
             target_orbs (list): spin-orbitals to which the operator adds fermions
             ceo_type (str): "sum" or "diff", defining the type of OVP-CEO when applicable
+            check_for_repeats (bool): if to check whether operator is in the pool before adding it
         """
 
         if not isinstance(new_operator, PoolOperator):
@@ -292,8 +293,12 @@ class OperatorPool(metaclass=abc.ABCMeta):
                                         ceo_type)
 
         is_nontrivial = new_operator.arrange()
+        if check_for_repeats:
+            no_repeats = new_operator not in self.operators
+        else:
+            no_repeats = True
 
-        if is_nontrivial and new_operator not in self.operators:
+        if is_nontrivial and no_repeats:
             self.operators.append(new_operator)
             position = len(self.operators) - 1
             return position
@@ -2422,7 +2427,7 @@ class FullPauliPool(PauliPool):
         for string in product("XYZI", repeat=self.n):
             op = 1j * string_to_qop(string)
             length = count_qubits(op)
-            self.add_operator(op, cnots=length * 2 - 2, cnot_depth=length * 2 - 2)
+            self.add_operator(op, cnots=length * 2 - 2, cnot_depth=length * 2 - 2, check_for_repeats=False)
 
     @property
     def op_type(self):
