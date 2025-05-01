@@ -1,8 +1,6 @@
 import numpy as np
 from scipy.sparse import csc_matrix
 
-from openfermion import QubitOperator
-
 try:
     from quspin.operators import hamiltonian
     from quspin.basis import spin_basis_1d
@@ -12,13 +10,16 @@ except:
     # Todo: fix, it's ugly
 
 from openfermion import (
+    QubitOperator,
     fermi_hubbard,
     get_ground_state,
     get_sparse_operator,
     get_quadratic_hamiltonian,
 )
+from openfermion.utils import count_qubits
 
 from .matrix_tools import ket_to_vector
+from .chemistry import get_hf_det
 
 class HubbardHamiltonian:
     """
@@ -45,6 +46,7 @@ class HubbardHamiltonian:
             x_dim, y_dim, t, u, periodic=p_b_conds, particle_hole_symmetry=ph_sym
         )
         self.operator = h
+        self.n = count_qubits(self.operator)
 
         self._ground_energy = None
         self._ground_state = None
@@ -114,6 +116,7 @@ class XXZHamiltonian:
             )
             h += j_z * QubitOperator(f"Z{i} Z{i + 1}")
         self.operator = h
+        self.n = count_qubits(self.operator)
 
         # Try to load precomputed ground energy
         self.ground_energy = self.load_ground_energy(l, j_z, j_xy)
@@ -266,3 +269,64 @@ class XXZHamiltonian:
             j_z = j_zs[i]
             e = es[i]
             print(f"if l=={l} and j_z=={j_z} and j_xy=={j_xy}:\n\tground_energy={e}\n")
+
+class FermionicHamiltonian:
+    """
+    Class for molecular Hamiltonians represented by Openfermion FermionOperators
+    """
+    def __init__(self, operator,description,n_electrons,n=None):
+        """
+        Initialize class instance.
+
+        Arguments:
+            operator (Union[FermionOperator,QubitOperator,InteractionOperator):
+            the operator describing the Hamiltonian
+            description (str): a description of the molecule
+            n_electrons (int): the number of electrons of the molecule
+            n (int): the number of qubits the operator acts on, if greater than
+                count_qubits(operator)
+        """
+
+        self.description = description
+        self.operator = operator
+        if n is None:
+            self.n = count_qubits(self.operator)
+        else:
+            self.n = n
+
+        self._ground_energy = None
+        self._ground_state = None
+
+        self.ref_det = get_hf_det(n_electrons, self.n)
+        ref_state = ket_to_vector(self.ref_det)
+        self.ref_state = csc_matrix(ref_state).transpose()
+
+    @property
+    def ground_state(self):
+        """
+        Returns the exact ground state of the Hamiltonian.
+        """
+
+        if self._ground_state is None:
+            ground_energy, ground_state = get_ground_state(
+                get_sparse_operator(self.operator)
+            )
+            self._ground_state = ground_state
+            self._ground_energy = ground_energy
+
+        return self._ground_state
+
+    @property
+    def ground_energy(self):
+        """
+        Returns the exact ground energy of the Hamiltonian.
+        """
+
+        if self._ground_energy is None:
+            ground_energy, ground_state = get_ground_state(
+                get_sparse_operator(self.operator)
+            )
+            self._ground_state = ground_state
+            self._ground_energy = ground_energy
+
+        return self._ground_energy
