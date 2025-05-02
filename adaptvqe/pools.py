@@ -77,6 +77,8 @@ class PoolOperator(metaclass=abc.ABCMeta):
 
             self._q_operator = None
             self.op_type = OpType.FERMIONIC
+            assert parents is None
+            self.parents = parents
 
         elif isinstance(operator, QubitOperator):
             self._f_operator = None
