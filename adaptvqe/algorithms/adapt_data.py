@@ -54,6 +54,8 @@ class IterationData:
         nfevs=None,
         ngevs=None,
         nits=None,
+        qubit_order=None,
+        n_swaps=None
     ):
         """
         Ansatz and energy at the end of the iteration
@@ -78,6 +80,8 @@ class IterationData:
         self.nfevs = nfevs
         self.ngevs = ngevs
         self.nits = nits
+        self.qubit_order = qubit_order
+        self.n_swaps = n_swaps
 
 
 class EvolutionData:
@@ -106,6 +110,8 @@ class EvolutionData:
         nfevs,
         ngevs,
         nits,
+        qubit_order,
+        n_swaps
     ):
 
         if self.its_data:
@@ -131,6 +137,8 @@ class EvolutionData:
             nfevs,
             ngevs,
             nits,
+            qubit_order,
+            n_swaps
         )
 
         self.its_data.append(it_data)
@@ -190,8 +198,16 @@ class EvolutionData:
         return [it_data.sel_gradients for it_data in self.its_data]
 
     @property
+    def qubit_orders(self):
+        return [it_data.qubit_order for it_data in self.its_data]
+
+    @property
     def sizes(self):
         return [len(it_data.ansatz.indices) for it_data in self.its_data]
+
+    @property
+    def n_swaps(self):
+        return [it_data.n_swaps for it_data in self.its_data]
 
     @property
     def last_it(self):
@@ -264,6 +280,8 @@ class AdaptData:
         nfevs,
         ngevs,
         nits,
+        qubit_order,
+        n_swaps=None
     ):
         """
         Receives and processes the values fed to it by an instance of the AdaptVQE
@@ -284,9 +302,13 @@ class AdaptData:
           gradients (list): the gradients of the ansatz elements at the end of the
             iteration
           nfevs (list): the number of function evaluations during the
-          optimization. List length should match the number of optimizations
+            optimization. List length should match the number of optimizations
           ngevs (list): the number of evaluations of operator gradients during the
-          optimization. List length should match the number of optimizations
+            optimization. List length should match the number of optimizations
+          qubit_order (list): order of the modes. qubit_order[i] is the mode represented
+            by qubit i.
+          n_swaps (int): number of swaps necessary to implement the last operation, if
+            the connectivity isn't all-to-all
         """
 
         if not isinstance(energy, float):
@@ -324,6 +346,12 @@ class AdaptData:
         if not isinstance(nits, list):
             raise TypeError("Expected list, not {}.".format(type(ngevs).__name__))
 
+        if not isinstance(qubit_order, list):
+            raise TypeError("Expected list, not {}.".format(type(qubit_order).__name__))
+
+        if not isinstance(n_swaps, (int, np.integer, None)):
+            raise TypeError("Expected int, not {}.".format(type(n_swaps).__name__))
+
         if len(coefficients) != len(indices):
             raise ValueError(
                 "The length of the coefficient list should match the"
@@ -360,6 +388,8 @@ class AdaptData:
             nfevs,
             ngevs,
             nits,
+            qubit_order,
+            n_swaps
         )
 
         self.iteration_counter += 1
