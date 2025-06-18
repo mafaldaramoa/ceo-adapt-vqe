@@ -27,6 +27,7 @@ pyscf 2.2.0
 openfermion 1.5.1
 openfermionpyscf 0.5
 scipy 1.10.1
+numpy 1.26.4
 ```
 
 While I tried to make the code compatible with more recent releases, I cannot guarantee proper functioning or identical results with versions other than those specified.
