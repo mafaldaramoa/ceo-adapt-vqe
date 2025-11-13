@@ -37,7 +37,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import warnings
-from numpy import (asarray, sqrt, Inf)
+from numpy import (asarray, sqrt, inf)
 import numpy as np
 
 try:
@@ -57,7 +57,7 @@ _epsilon = sqrt(np.finfo(float).eps)
 
 
 def minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
-                  gtol=1e-5, norm=Inf, eps=_epsilon, maxiter=None,
+                  gtol=1e-5, norm=inf, eps=_epsilon, maxiter=None,
                   disp=False, return_all=False, finite_diff_rel_step=None,
                   xrtol=0, initial_inv_hessian=None, f0=None, g0=None, **unknown_options):
     """
