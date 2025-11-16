@@ -20,6 +20,7 @@ from openfermion.utils import count_qubits
 
 from .matrix_tools import ket_to_vector
 from .chemistry import get_hf_det
+from .tensor_helpers import computational_basis_mps
 
 class HubbardHamiltonian:
     """
@@ -139,6 +140,7 @@ class XXZHamiltonian:
         neel_state = ket_to_vector(neel_state_cb)
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
+        self.tn_ref_state = computational_basis_mps(neel_state_cb)
         self.ref_det = neel_state_cb
 
     def diagonalize_np(self):
@@ -300,6 +302,7 @@ class FermionicHamiltonian:
         self.ref_det = get_hf_det(n_electrons, self.n)
         ref_state = ket_to_vector(self.ref_det)
         self.ref_state = csc_matrix(ref_state).transpose()
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
 
     @property
     def ground_state(self):
