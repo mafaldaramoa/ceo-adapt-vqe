@@ -30,6 +30,8 @@ from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
+from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
+
 from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count,
                        paired_f_swap_network_orderings, prepare_lnn_op, count_qe_lnn_swaps)
 from .chemistry import normalize_op
@@ -1259,31 +1261,31 @@ class SpinCompGSD(OperatorPool):
 
 class PauliPool(SingletGSD):
     """
-    Pool consisting of the individual Pauli strings appearing in the inglet GSD operators.
+    pool consisting of the individual pauli strings appearing in the inglet gsd operators.
     """
     name = "pauli_pool"
 
     def create_operators(self):
         """
-        Create pool operators and insert them into self.operators (list).
+        create pool operators and insert them into self.operators (list).
         """
 
-        # Create fermionic operators
+        # create fermionic operators
         super().create_operators()
 
-        # Store the singlet gsd operators temporarily
+        # store the singlet gsd operators temporarily
         pool_operators = self.operators
 
-        # Empty operator list - we will fill it with qubit operators now
+        # empty operator list - we will fill it with qubit operators now
         self.operators = []
 
-        # Go through the pool operators
+        # go through the pool operators
         for pool_operator in pool_operators:
 
             fermionic_op = pool_operator.operator
             qubit_op = jordan_wigner(fermionic_op)
 
-            # Go through the Pauli strings in the operator
+            # go through the pauli strings in the operator
             for pauli in qubit_op.terms:
                 qubit_op = QubitOperator(pauli, 1j)
 
@@ -1295,12 +1297,12 @@ class PauliPool(SingletGSD):
 
     def expm(self, coefficient, index):
         """
-        Calculates the exponential of the operator defined by index, when multiplied by the coefficient.
-        If an eigendecomposition of the operator exists, it will be used for increased efficiency.
-        Otherwise, a trigonometric formula leveraging the structure of the operators is used. This is quite faster
+        calculates the exponential of the operator defined by index, when multiplied by the coefficient.
+        if an eigendecomposition of the operator exists, it will be used for increased efficiency.
+        otherwise, a trigonometric formula leveraging the structure of the operators is used. this is quite faster
             than using generic matrix exponentiation methods.
 
-        Arguments:
+        arguments:
             coefficient (float)
             index (int)
         """
@@ -1312,12 +1314,12 @@ class PauliPool(SingletGSD):
         return exp_op
     
     def tn_expm(self, coefficient, index):
-        """Compute the exponential of the operator multiplied by its coefficient.
-        We use a trig formulate, then convert to an MPS."""
+        """compute the exponential of the operator multiplied by its coefficient.
+        we use a trig formulate, then convert to an mps."""
 
         op = self.operators[index].q_operator
         nq = of.utils.count_qubits(op)
-        exp_op = np.cos(coefficient) * of.QubitOperator.identity(nq) + np.sin(coefficient) * op
+        exp_op = np.cos(coefficient) * of.qubitoperator.identity(nq) + np.sin(coefficient) * op
         exp_op_cirq = of.transforms.qubit_operator_to_pauli_sum(exp_op)
         qs = exp_op_cirq.qubits
         exp_op_mpo = pauli_sum_to_mpo(exp_op_cirq, qs)
@@ -1325,13 +1327,13 @@ class PauliPool(SingletGSD):
 
     def expm_mult(self, coefficient, index, other):
         """
-        Calculates the exponential of the operator defined by index, when multiplied by the coefficient, multiplying
+        calculates the exponential of the operator defined by index, when multiplied by the coefficient, multiplying
         another pool operator (indexed "other").
-        If an eigendecomposition of the operator exists, it will be used for increased efficiency.
-        Otherwise, a trigonometric formula leveraging the structure of the operators is used. This is quite faster
+        if an eigendecomposition of the operator exists, it will be used for increased efficiency.
+        otherwise, a trigonometric formula leveraging the structure of the operators is used. this is quite faster
         than using generic matrix exponentiation methods.
 
-        Arguments:
+        arguments:
             coefficient (float)
             index (int)
             other (csc_matrix)
@@ -1342,7 +1344,7 @@ class PauliPool(SingletGSD):
         exp_op = self.expm(coefficient, index)
         m = exp_op.dot(other)
         '''
-        # It's faster to do product first, then sums; this way we never do
+        # it's faster to do product first, then sums; this way we never do
         # matrix-matrix operations, just matrix-vector
         op = self.get_imp_op(index)
         m = op.dot(other)
@@ -1350,8 +1352,8 @@ class PauliPool(SingletGSD):
         # '''
         return m
     
-    def tn_expm_mult_state(self, coefficient, index, state: MatrixProducState):
-        """Exponentiates a pool operator times a coefficient, then multiplies it by a state."""
+    def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState):
+        """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         op = self.operators[index].q_operator
         op_psum = cirq.PauliSum(of.transforms.qubit_operator_to_pauli_sum(op))
@@ -1360,9 +1362,9 @@ class PauliPool(SingletGSD):
 
     def get_circuit(self, indices, coefficients):
         """
-        Returns the circuit corresponding to the ansatz defined by the arguments.
-        Function for pools where the generators are sums of commuting Paulis.
-        E.g. GSD, Pauli pool
+        returns the circuit corresponding to the ansatz defined by the arguments.
+        function for pools where the generators are sums of commuting paulis.
+        e.g. gsd, pauli pool
         """
         circuit = QuantumCircuit(self.n)
 
