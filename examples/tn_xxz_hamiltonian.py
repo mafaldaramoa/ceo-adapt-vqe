@@ -11,11 +11,14 @@ from adaptvqe.pools import FullPauliPool, TiledPauliPool
 from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
 
+max_mpo_bond = 100
+max_mps_bond = 100
+
 l = 3
 j_xy = 1
 j_z = 1
 h = XXZHamiltonian(j_xy, j_z, l)
-pool = FullPauliPool(n=l)
+pool = FullPauliPool(n=l, max_mpo_bond=max_mpo_bond)
 
 my_adapt = TensorNetAdapt(
     pool=pool,
@@ -27,4 +30,7 @@ my_adapt = TensorNetAdapt(
     sel_criterion="gradient",
     recycle_hessian=False,
     rand_degenerate=True,
+    max_mpo_bond=max_mpo_bond,
+    max_mps_bond=max_mps_bond
 )
+my_adapt.run()

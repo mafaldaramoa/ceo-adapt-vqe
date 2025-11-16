@@ -193,7 +193,7 @@ class PoolOperator(metaclass=abc.ABCMeta):
 class OperatorPool(metaclass=abc.ABCMeta):
     name = None
 
-    def __init__(self, molecule=None, frozen_orbitals=[], n=None, source_ops=None):
+    def __init__(self, molecule=None, frozen_orbitals=[], n=None, source_ops=None, max_mpo_bond=None):
         """
         Arguments:
             molecule (PyscfMolecularData): the molecule for which we will use the pool
@@ -203,6 +203,8 @@ class OperatorPool(metaclass=abc.ABCMeta):
             on system size, not operator support
             source_ops (list): the operators to generate the pool from, if tiling.
         """
+
+        self.max_mpo_bond = max_mpo_bond
 
         if self.name is None:
             raise NotImplementedError("Subclasses must define a pool name.")
@@ -447,6 +449,14 @@ class OperatorPool(metaclass=abc.ABCMeta):
         Get qubit operator labeled by index.
         """
         return self.operators[index].q_operator
+    
+    def get_mpo_op(self, index):
+        """Convert the qubit operator form to an MPO."""
+
+        qubit_op = self.get_q_op(index)
+        qubit_op_cirq = of.transforms.qubit_operator_to_pauli_sum(qubit_op)
+        qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, qubit_op_cirq.qubits, self.max_mpo_bond)
+        return qubit_op_mpo
 
     def get_exp_op(self, index, coefficient=1):
         """
