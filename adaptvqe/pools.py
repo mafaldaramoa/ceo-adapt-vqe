@@ -12,6 +12,9 @@ from copy import copy
 from warnings import warn
 from itertools import product
 
+import cirq
+
+import openfermion as of
 from openfermion import (FermionOperator,
                          get_sparse_operator,
                          hermitian_conjugated,
@@ -32,7 +35,7 @@ from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_c
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
 from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
-
+from .tensor_helpers import pauli_sum_to_mpo
 
 
 class OpType:
@@ -43,6 +46,7 @@ class OpType:
 class ImplementationType:
     SPARSE = 0
     QISKIT = 1
+    TENSORS = 2
 
 
 class PoolOperator(metaclass=abc.ABCMeta):
@@ -1306,6 +1310,18 @@ class PauliPool(SingletGSD):
         n, n = op.shape
         exp_op = np.cos(coefficient) * identity(n) + np.sin(coefficient) * op
         return exp_op
+    
+    def tn_expm(self, coefficient, index):
+        """Compute the exponential of the operator multiplied by its coefficient.
+        We use a trig formulate, then convert to an MPS."""
+
+        op = self.operators[index].q_operator
+        nq = of.utils.count_qubits(op)
+        exp_op = np.cos(coefficient) * of.QubitOperator.identity(nq) + np.sin(coefficient) * op
+        exp_op_cirq = of.transforms.qubit_operator_to_pauli_sum(exp_op)
+        qs = exp_op_cirq.qubits
+        exp_op_mpo = pauli_sum_to_mpo(exp_op_cirq, qs)
+        return exp_op_mpo
 
     def expm_mult(self, coefficient, index, other):
         """
@@ -1333,6 +1349,14 @@ class PauliPool(SingletGSD):
         m = np.cos(coefficient) * other + np.sin(coefficient) * m
         # '''
         return m
+    
+    def tn_expm_mult_state(self, coefficient, index, state: MatrixProducState):
+        """Exponentiates a pool operator times a coefficient, then multiplies it by a state."""
+
+        op = self.operators[index].q_operator
+        op_psum = cirq.PauliSum(of.transforms.qubit_operator_to_pauli_sum(op))
+        op_mps = pauli_sum_to_mpo(op_psum, op_psum.qubits, self.max_mpo_bond)
+        mult_state = np.cos(coefficient) * state + np.sin(coefficient) * op_mps.apply(state)
 
     def get_circuit(self, indices, coefficients):
         """

@@ -16,6 +16,8 @@ from scipy.sparse.linalg import expm, expm_multiply
 from openfermion import get_sparse_operator, count_qubits
 from openfermion.transforms import get_fermion_operator, freeze_orbitals
 
+from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
+
 from .adapt_data import AdaptData
 from ..chemistry import chemical_accuracy, get_hf_det, create_spin_adapted_one_body_op
 from ..circuits import prepare_lnn_op, count_qe_lnn_swaps, swap_qe_lnn
@@ -23,6 +25,7 @@ from ..matrix_tools import ket_to_vector
 from ..minimize import minimize_bfgs
 from ..pools import ImplementationType
 from ..utils import bfgs_update
+from ..tensor_helpers import computational_basis_mps
 
 class AdaptVQE(metaclass=abc.ABCMeta):
     """
@@ -260,6 +263,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.sparse_ref_state = csc_matrix(
             ket_to_vector(self.ref_det), dtype=complex
         ).transpose()
+
+        # TODO Convert self.ref_det to an MPS.
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
 
         hamiltonian = self.molecule.get_molecular_hamiltonian()
 
@@ -3749,3 +3755,93 @@ class SampledLinAlgAdapt(LinAlgAdapt):
     @property
     def name(self):
         return "sampled_linal_adapt"
+
+
+class TensorNetAdapt(AdaptVQE):
+    """ADAPT VQE with tensor networks for the states and operators."""
+
+    def __init__(self, *args, **kvargs):
+
+        kvargs["pool"].imp_type = ImplementationType.TENSORS
+
+        super().__init__(*args, **kvargs)
+
+        if self.shots:
+            raise ValueError("Finite number of shots not compatible with TensorNetAdapt class.")
+
+        self.state = self.tn_ref_state
+        self.ref_state = self.tn_ref_state
+
+    def evaluate_observable(
+        self,
+        observable: MatrixProductOperator,
+        coefficients=None,
+        indices=None,
+        ref_state=None,
+        orb_params=None,
+    ) -> float:
+        """
+        Evaluates the observable in the state specified by the list of coefficients and indices
+
+        Arguments:
+            observable (MatrixProductOperator): the hermitian operator to be measured
+            coefficients (list): the coefficients of the ansatz
+            indices (list): the indices of the pool operators defining the ansatz
+            ref_state (csc_matrix): the reference state to consider
+            orb_params (list): the parameters for the orbital optimization
+
+        Returns:
+            exp_value (float): the exact expectation value of the observable
+        """
+
+        ket = self.get_state(coefficients, indices, ref_state)
+
+        if orb_params is not None:
+            orb_rotation_generator = self.create_orb_rotation_generator(orb_params)
+            ket = expm_multiply(orb_rotation_generator, ket)
+
+        # Get the corresponding bra and calculate the energy: |<bra| H |ket>|
+        bra = ket.H
+        # exp_value = (bra * observable * ket)[0, 0].real # slower
+        exp_value = (bra @ observable.apply(ket)).real
+
+        return exp_value
+
+    def compute_state(self, coefficients=None, indices=None, ref_state=None, bra=False):
+        """
+        Calculates the state specified by the list of coefficients and indices. If coefficients or indices are None, the
+        current ones are assumed.
+
+        Arguments:
+            coefficients (list): the coefficients of the ansatz
+            indices (list): the indices of the pool operators defining the ansatz
+            ref_state (MatrixProductState): the reference state in which the ansatz acts
+            bra (bool): whether to return the adjoint of the state
+
+        Returns:
+            state (csc_matrix): the desired state
+        """
+
+        if indices is None:
+            indices = self.indices
+        if coefficients is None:
+            coefficients = self.coefficients
+
+        if ref_state is None:
+            ref_state = self.sparse_ref_state
+        state = ref_state.copy()
+
+        if bra:
+            coefficients = [-c for c in reversed(coefficients)]
+            indices = reversed(indices)
+
+        # Apply e ** (coefficient * operator) to the state (ket) for each
+        # operator in the ansatz, following the order of the list
+        for coefficient, index in zip(coefficients, indices):
+            # Exponentiate the operator and update ket to represent the state after
+            # this operator has been applied
+            state = self.pool.tn_expm_mult_state(coefficient, index, state)
+        if bra:
+            state = state.H
+
+        return state
