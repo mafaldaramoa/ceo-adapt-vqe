@@ -264,7 +264,6 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             ket_to_vector(self.ref_det), dtype=complex
         ).transpose()
 
-        # TODO Convert self.ref_det to an MPS.
         self.tn_ref_state = computational_basis_mps(self.ref_det)
 
         hamiltonian = self.molecule.get_molecular_hamiltonian()
@@ -289,6 +288,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
         self.ref_det = self.data.ref_det
         self.sparse_ref_state = self.data.sparse_ref_state
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
 
         hamiltonian = self.data.hamiltonian
 
@@ -311,6 +311,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.file_name = f"{self.custom_hamiltonian.description}_{self.n}"
         self.sparse_ref_state = self.custom_hamiltonian.ref_state
         self.ref_det = self.custom_hamiltonian.ref_state
+        self.tn_ref_state = self.custom_hamiltonian.tn_ref_state
         hamiltonian = self.custom_hamiltonian.operator
         self.exact_energy = self.custom_hamiltonian.ground_energy
 
@@ -3807,6 +3808,10 @@ class TensorNetAdapt(AdaptVQE):
 
         return exp_value
 
+    @property
+    def name(self):
+        return "tensor-net-adapt"
+
     def compute_state(self, coefficients=None, indices=None, ref_state=None, bra=False):
         """
         Calculates the state specified by the list of coefficients and indices. If coefficients or indices are None, the
@@ -3845,3 +3850,73 @@ class TensorNetAdapt(AdaptVQE):
             state = state.H
 
         return state
+
+    def create_orb_rotation_generator(self, orb_params):
+        """
+        Create orbital rotation generator from self.orb_ops and the provided parameters.
+
+        Arguments:
+            orb_params (list): the parameters to multiply each operator in self.orb_ops
+
+        Returns:
+            generator (MatrixProdctOperator): the generator of the orbital rotation
+        """
+
+        # TODO Should these be FermionOperators?
+        assert len(orb_params) == len(self.orb_ops)
+
+        generator = None
+        for param, op in zip(orb_params, self.orb_ops):
+
+            if not np.abs(param):
+                continue
+
+            if generator is None:
+                generator = param * op
+            else:
+                generator = generator + param * op
+
+        if generator is None:
+            generator = np.zeros((2**self.n, 2**self.n), dtype=complex)
+            generator = csc_matrix(generator)
+
+        return generator
+
+    def save_hamiltonian(self, hamiltonian):
+        """
+        Store the provided hamiltonian as self.hamiltonian attribute after converting it to a sparse matrix.
+
+        Arguments:
+            hamiltonian (Union[InteractionOperator,csc_matrix])
+        """
+
+        self.hamiltonian = hamiltonian
+
+    def create_orb_rotation_ops(self):
+        """
+        Create list of orbital rotation operators.
+        See https://doi.org/10.48550/arXiv.2212.11405
+        """
+
+        n_spatial = int(self.n / 2)
+
+        k = 0
+        self.orb_ops = []
+        self.sparse_orb_ops = []
+
+        if not self.orb_opt:
+            return
+
+        for p in range(n_spatial):
+            for q in range(p + 1, n_spatial):
+                new_op = create_spin_adapted_one_body_op(p, q)
+                # new_op = get_sparse_operator(new_op, n_spatial * 2)
+                self.orb_ops.append(new_op)
+                k += 1
+
+        assert len(self.orb_ops) == int((n_spatial * (n_spatial - 1)) / 2)
+
+        return
+
+    def observable_to_measurement(self, observable):
+        return observable

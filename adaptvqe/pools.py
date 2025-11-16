@@ -319,7 +319,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
     @imp_type.setter
     def imp_type(self, imp_type):
-        if imp_type not in [ImplementationType.SPARSE]:
+        if imp_type not in [ImplementationType.SPARSE, ImplementationType.TENSORS]:
             raise ValueError("Argument isn't a valid implementation type.")
 
         self._imp_type = imp_type
