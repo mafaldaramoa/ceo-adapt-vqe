@@ -4107,8 +4107,9 @@ class TensorNetAdapt(AdaptVQE):
             return []
 
         # Define orbital rotation
-        hamiltonian = self.hamiltonian
+        hamiltonian = self.hamiltonian_mpo
         if orb_params is not None:
+            # TODO How can we translate this to TN setting?
             generator = self.create_orb_rotation_generator(orb_params)
             orb_rotation = expm(generator)
             hamiltonian = orb_rotation.transpose().conj() * hamiltonian * orb_rotation
@@ -4120,7 +4121,7 @@ class TensorNetAdapt(AdaptVQE):
         state = self.compute_state(coefficients, indices)
         right_matrix = self.tn_ref_state
         left_matrix = self.compute_state(
-            coefficients, indices, hamiltonian.dot(state), bra=True
+            coefficients, indices, state.gate_with_mpo(hamiltonian), bra=True
         )
 
         # Ansatz gradients
