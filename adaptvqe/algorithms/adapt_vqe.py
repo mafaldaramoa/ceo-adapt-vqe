@@ -3806,24 +3806,13 @@ class TensorNetAdapt(AdaptVQE):
 
         if orb_params is not None:
             orb_rotation_generator = self.create_orb_rotation_generator(orb_params)
-            ket = expm_multiply(orb_rotation_generator, ket)
+            if orb_rotation_generator is not None:
+                ket = expm_multiply(orb_rotation_generator, ket)
 
         if len(observable.tensors) != len(ket.tensors):
             warn(f"Observable has {len(observable.tensors)} tensors but MPS has {len(ket.tensors)}.")
 
-        print("In evaluate_observable.")
-        print(f"ket ind id: {ket.site_ind_id}.")
-        # exp_value = (ket.H @ ket.gate_with_mpo(observable)).real
         obs_on_ket = observable.apply(ket)
-        print(f"Indices of observable:")
-        for t in observable.tensors:
-            print(t.inds)
-        print(f"Indices of obs_on_ket:")
-        for t in obs_on_ket.tensors:
-            print(t.inds)
-        print(f"Indices of ket:")
-        for t in ket.tensors:
-            print(t.inds)
         exp_value = (ket.H @ obs_on_ket).real
 
         return exp_value
@@ -3862,7 +3851,7 @@ class TensorNetAdapt(AdaptVQE):
             coefficients = self.coefficients
 
         if ref_state is None:
-            ref_state = self.sparse_ref_state
+            ref_state = self.tn_ref_state
         state = ref_state.copy()
 
         if bra:
@@ -3906,8 +3895,9 @@ class TensorNetAdapt(AdaptVQE):
                 generator = generator + param * op
 
         if generator is None:
-            generator = np.zeros((2**self.n, 2**self.n), dtype=complex)
-            generator = csc_matrix(generator)
+            # generator = np.zeros((2**self.n, 2**self.n), dtype=complex)
+            # generator = csc_matrix(generator)
+            generator = None
 
         return generator
 
@@ -4129,8 +4119,9 @@ class TensorNetAdapt(AdaptVQE):
             orb_rotation = expm(generator)
             hamiltonian = orb_rotation.transpose().conj() * hamiltonian * orb_rotation
         else:
-            orb_rotation = np.eye(2**self.n)
-            orb_rotation = csc_matrix(orb_rotation)
+            # orb_rotation = np.eye(2**self.n)
+            # orb_rotation = csc_matrix(orb_rotation)
+            orb_rotation = hamiltonian.identity()
 
         gradients = []
         state = self.compute_state(coefficients, indices)
@@ -4145,10 +4136,10 @@ class TensorNetAdapt(AdaptVQE):
             coefficient = coefficients[operator_pos]
             index = indices[operator_pos]
 
-            left_matrix = self.pool.tn_expm_mult(coefficient, index, left_matrix)
-            right_matrix = self.pool.tn_expm_mult(coefficient, index, right_matrix)
+            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix)
+            right_matrix = self.pool.tn_expm_mult_state(coefficient, index, right_matrix)
 
-            gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).data.real
+            gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).real
             gradients.append(gradient)
 
         right_matrix = right_matrix.gate_with_mpo(orb_rotation)
@@ -4192,19 +4183,26 @@ class TensorNetAdapt(AdaptVQE):
             # Gradient observable for this operator has not been created yet
 
             operator = self.pool.get_mpo_op(index)
-            print("In eval_candidate_gradient.")
-            print("Inds of operator")
-            for t in operator.tensors:
-                print(t.inds)
-            print("Inds of hamiltonian:")
-            for t in self.hamiltonian_mpo.tensors:
-                print(t.inds)
             observable = 2 * self.hamiltonian_mpo.apply(operator)
-            print("Inds of observable:")
-            for t in observable.tensors:
-                print(t.inds)
 
-        print(f"Upper and lower ind IDs: {observable.upper_ind_id}, {observable.lower_ind_id}.")
         gradient = self.evaluate_observable(observable, coefficients, indices)
 
         return gradient
+
+    def perform_sim_transform(self, orb_params):
+        """
+        Perform a similarity transform on the Hamiltonian.
+
+        Arguments:
+            orb_params (list): the parameters for the orbital tansformation
+        """
+
+        generator = self.create_orb_rotation_generator(orb_params)
+        if generator is not None:
+            orb_rotation = expm(generator)
+            self.hamiltonian = (
+                orb_rotation.transpose().conj().dot(self.hamiltonian).dot(orb_rotation)
+            )
+        self.energy_meas = self.observable_to_measurement(self.hamiltonian)
+
+        return

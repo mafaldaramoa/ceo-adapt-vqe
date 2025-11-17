@@ -1376,7 +1376,13 @@ class PauliPool(SingletGSD):
         op = self.operators[index].q_operator
         op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
         op_mps = pauli_sum_to_mpo(op_psum, op_psum.qubits, self.max_mpo_bond)
-        mult_state = np.cos(coefficient) * state + np.sin(coefficient) * op_mps.apply(state)
+        # There is a weird thing in quimb where we can't multiply an MPS by 0.
+        # If coefficient is near 0, replace sin(coefficient) -> 1e-18.
+        if abs(coefficient) <= 1e-18:
+            sin_coeff = 1e-18
+        else:
+            sin_coeff = np.sin(coefficient)
+        mult_state = np.cos(coefficient) * state + sin_coeff * op_mps.apply(state)
         return mult_state
 
     def get_circuit(self, indices, coefficients):
