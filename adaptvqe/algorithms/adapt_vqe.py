@@ -2503,6 +2503,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             g0=g0,
         )
 
+        if not opt_result.success:
+            warn(f"Optimizer did not succeed. Message: {opt_result.message}")
+
         # Retrieve solution and perform similarity transform accordingly
         opt_coefficients = list(opt_result.x)
         orb_params = opt_coefficients[: self.orb_opt_dim]

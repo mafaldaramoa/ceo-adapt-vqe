@@ -23,7 +23,7 @@ pool = FullPauliPool(n=l, max_mpo_bond=max_mpo_bond)
 my_adapt = LinAlgAdapt(
     pool=pool,
     custom_hamiltonian=h,
-    verbose=False,
+    verbose=True,
     threshold=10**-5,
     max_adapt_iter=5,
     max_opt_iter=10000,
@@ -37,10 +37,10 @@ my_adapt.run()
 
 print("Starting ADAPT with tensor networks.")
 
-my_adapt = TensorNetAdapt(
+tn_adapt = TensorNetAdapt(
     pool=pool,
     custom_hamiltonian=h,
-    verbose=False,
+    verbose=True,
     threshold=10**-5,
     max_adapt_iter=5,
     max_opt_iter=10000,
@@ -50,4 +50,5 @@ my_adapt = TensorNetAdapt(
     max_mpo_bond=max_mpo_bond,
     max_mps_bond=max_mps_bond
 )
-my_adapt.run()
+tn_adapt.run()
+print(tn_adapt.coefficients)
