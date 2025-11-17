@@ -1377,6 +1377,7 @@ class PauliPool(SingletGSD):
         op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
         op_mps = pauli_sum_to_mpo(op_psum, op_psum.qubits, self.max_mpo_bond)
         mult_state = np.cos(coefficient) * state + np.sin(coefficient) * op_mps.apply(state)
+        return mult_state
 
     def get_circuit(self, indices, coefficients):
         """
