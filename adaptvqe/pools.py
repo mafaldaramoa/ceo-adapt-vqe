@@ -399,6 +399,14 @@ class OperatorPool(metaclass=abc.ABCMeta):
         Returns list of qubits in which the operator specified by this index acts non trivially.
         """
         return self.operators[index].qubits
+    
+    @property
+    def all_qubits(self):
+        return set.union(*[self.get_qubits(idx) for idx in range(len(self.operators))])
+    
+    @property
+    def all_qubits_cirq(self):
+        return [cirq.LineQubit(idx) for idx in self.all_qubits]
 
     def get_parents(self, index):
         """
@@ -455,7 +463,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         qubit_op = self.get_q_op(index)
         qubit_op_cirq = of.transforms.qubit_operator_to_pauli_sum(qubit_op)
-        qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, qubit_op_cirq.qubits, self.max_mpo_bond)
+        qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, self.all_qubits_cirq, self.max_mpo_bond)
         return qubit_op_mpo
 
     def get_exp_op(self, index, coefficient=1):
@@ -1366,7 +1374,7 @@ class PauliPool(SingletGSD):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         op = self.operators[index].q_operator
-        op_psum = cirq.PauliSum(of.transforms.qubit_operator_to_pauli_sum(op))
+        op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
         op_mps = pauli_sum_to_mpo(op_psum, op_psum.qubits, self.max_mpo_bond)
         mult_state = np.cos(coefficient) * state + np.sin(coefficient) * op_mps.apply(state)
 

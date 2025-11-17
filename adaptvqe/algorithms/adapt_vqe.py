@@ -5,6 +5,8 @@ Created on Wed Jun 29 10:00:03 2022
 @author: mafal
 """
 
+from warnings import warn
+
 from copy import copy, deepcopy
 import abc
 import numpy as np
@@ -3806,10 +3808,23 @@ class TensorNetAdapt(AdaptVQE):
             orb_rotation_generator = self.create_orb_rotation_generator(orb_params)
             ket = expm_multiply(orb_rotation_generator, ket)
 
-        # Get the corresponding bra and calculate the energy: |<bra| H |ket>|
-        bra = ket.H
-        # exp_value = (bra * observable * ket)[0, 0].real # slower
-        exp_value = (bra @ observable.apply(ket)).real
+        if len(observable.tensors) != len(ket.tensors):
+            warn(f"Observable has {len(observable.tensors)} tensors but MPS has {len(ket.tensors)}.")
+
+        print("In evaluate_observable.")
+        print(f"ket ind id: {ket.site_ind_id}.")
+        # exp_value = (ket.H @ ket.gate_with_mpo(observable)).real
+        obs_on_ket = observable.apply(ket)
+        print(f"Indices of observable:")
+        for t in observable.tensors:
+            print(t.inds)
+        print(f"Indices of obs_on_ket:")
+        for t in obs_on_ket.tensors:
+            print(t.inds)
+        print(f"Indices of ket:")
+        for t in ket.tensors:
+            print(t.inds)
+        exp_value = (ket.H @ obs_on_ket).real
 
         return exp_value
     
@@ -4177,9 +4192,19 @@ class TensorNetAdapt(AdaptVQE):
             # Gradient observable for this operator has not been created yet
 
             operator = self.pool.get_mpo_op(index)
-            observable = 2 * self.hamiltonian_mpo @ operator
+            print("In eval_candidate_gradient.")
+            print("Inds of operator")
+            for t in operator.tensors:
+                print(t.inds)
+            print("Inds of hamiltonian:")
+            for t in self.hamiltonian_mpo.tensors:
+                print(t.inds)
+            observable = 2 * self.hamiltonian_mpo.apply(operator)
+            print("Inds of observable:")
+            for t in observable.tensors:
+                print(t.inds)
 
-        # TODO Why is observable a complex number when we run tn_xxz_hamiltonian.py?
+        print(f"Upper and lower ind IDs: {observable.upper_ind_id}, {observable.lower_ind_id}.")
         gradient = self.evaluate_observable(observable, coefficients, indices)
 
         return gradient
