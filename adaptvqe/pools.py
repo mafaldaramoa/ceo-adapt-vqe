@@ -1375,7 +1375,7 @@ class PauliPool(SingletGSD):
 
         op = self.operators[index].q_operator
         op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
-        op_mps = pauli_sum_to_mpo(op_psum, op_psum.qubits, self.max_mpo_bond)
+        op_mps = pauli_sum_to_mpo(op_psum, self.all_qubits_cirq, self.max_mpo_bond)
         # There is a weird thing in quimb where we can't multiply an MPS by 0.
         # If coefficient is near 0, replace sin(coefficient) -> 1e-18.
         if abs(coefficient) <= 1e-18:
