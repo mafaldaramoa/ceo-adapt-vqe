@@ -3160,8 +3160,8 @@ class LinAlgAdapt(AdaptVQE):
         # Remember that orbital optimization coefficients come first
         gradients = orb_gradients + gradients
 
-        print("In LinAlgAdapt.estimate_gradients.")
-        print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
+        # print("In LinAlgAdapt.estimate_gradients.")
+        # print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
 
         return gradients
 
@@ -4162,8 +4162,8 @@ class TensorNetAdapt(AdaptVQE):
         # Remember that orbital optimization coefficients come first
         gradients = orb_gradients + gradients
 
-        print("In TensorNetAdapt.estimate_gradients.")
-        print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
+        # print("In TensorNetAdapt.estimate_gradients.")
+        # print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
 
         return gradients
 

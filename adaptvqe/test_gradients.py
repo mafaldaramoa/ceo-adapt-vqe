@@ -102,7 +102,14 @@ class TestGradients(unittest.TestCase):
                 coefficients = list(coeffs)
                 tn_grad = np.array(tn_adapt.estimate_gradients(coefficients=coefficients, indices=indices))
                 linalg_grad = np.array(linalg_adapt.estimate_gradients(coefficients=coefficients, indices=indices))
-                test_bools.append(norm(tn_grad - linalg_grad) <= 1e-4)
+                if norm(linalg_grad) <= 1e-8:
+                    rel_error = norm(tn_grad)
+                else:
+                    rel_error = norm(tn_grad - linalg_grad) / norm(linalg_grad)
+                test_bool = rel_error <= 1e-4
+                if not test_bool:
+                    print(f"Got relative error {rel_error:4.5e} from gradients\n{linalg_grad}, {tn_grad}\nwith indices={indices}.")
+                test_bools.append(test_bool)
         self.assertTrue(test_bools)
 
 if __name__ == "__main__":
