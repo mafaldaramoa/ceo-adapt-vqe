@@ -4142,10 +4142,12 @@ class TensorNetAdapt(AdaptVQE):
             coefficient = coefficients[operator_pos]
             index = indices[operator_pos]
 
-            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix)
+            # left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix)
+            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix.H).H
             right_matrix = self.pool.tn_expm_mult_state(coefficient, index, right_matrix)
 
-            gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).real
+            # gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).real
+            gradient = 2 * (left_matrix @ right_matrix.gate_with_mpo(operator)).real
             gradients.append(gradient)
 
         right_matrix = right_matrix.gate_with_mpo(orb_rotation)
