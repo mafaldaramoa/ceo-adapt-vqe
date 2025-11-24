@@ -12,7 +12,7 @@ from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt, LinAlgAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
 
 max_mpo_bond = 100
-max_mps_bond = 100
+max_mps_bond = 5
 
 l = 3
 j_xy = 1
@@ -51,4 +51,6 @@ tn_adapt = TensorNetAdapt(
     max_mps_bond=max_mps_bond
 )
 tn_adapt.run()
-print(tn_adapt.coefficients)
+
+print(f"LinAlg final energy: {my_adapt.energy}")
+print(f"TensorNet final energy: {tn_adapt.energy}")

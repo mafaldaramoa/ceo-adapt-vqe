@@ -1370,7 +1370,7 @@ class PauliPool(SingletGSD):
         # '''
         return m
     
-    def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState):
+    def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState, max_bond=None):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         op = self.operators[index].q_operator
@@ -1383,6 +1383,9 @@ class PauliPool(SingletGSD):
         else:
             sin_coeff = np.sin(coefficient)
         mult_state = np.cos(coefficient) * state + sin_coeff * op_mps.apply(state)
+        # Optionally compress the MPS.
+        if max_bond is not None:
+            mult_state.compress(max_bond=max_bond)
         return mult_state
 
     def get_circuit(self, indices, coefficients):

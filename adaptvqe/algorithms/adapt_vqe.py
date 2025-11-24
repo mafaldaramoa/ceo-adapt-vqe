@@ -3869,7 +3869,7 @@ class TensorNetAdapt(AdaptVQE):
         for coefficient, index in zip(coefficients, indices):
             # Exponentiate the operator and update ket to represent the state after
             # this operator has been applied
-            state = self.pool.tn_expm_mult_state(coefficient, index, state)
+            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond)
         if bra:
             state = state.H
 
@@ -4143,8 +4143,8 @@ class TensorNetAdapt(AdaptVQE):
             index = indices[operator_pos]
 
             # left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix)
-            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix.H).H
-            right_matrix = self.pool.tn_expm_mult_state(coefficient, index, right_matrix)
+            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix.H, max_bond=self.max_mps_bond).H
+            right_matrix = self.pool.tn_expm_mult_state(coefficient, index, right_matrix, max_bond=self.max_mps_bond)
 
             # gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).real
             gradient = 2 * (left_matrix @ right_matrix.gate_with_mpo(operator)).real
