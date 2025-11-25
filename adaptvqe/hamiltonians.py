@@ -1,3 +1,4 @@
+from warnings import warn
 import numpy as np
 from scipy.sparse import csc_matrix
 
@@ -122,19 +123,24 @@ class XXZHamiltonian:
         # Try to load precomputed ground energy
         self.ground_energy = self.load_ground_energy(l, j_z, j_xy)
 
-        if self.ground_energy is None:
-            # Define Hamiltonian in Quspin
-            hz = 0  # z external field
-            basis = spin_basis_1d(l, pauli=True)
-            j_zz = [[j_z, i, i + 1] for i in range(l - 1)]  # OBC
-            j_xy = [[j_xy / 2.0, i, i + 1] for i in range(l - 1)]  # OBC
-            static = [["+-", j_xy], ["-+", j_xy], ["zz", j_zz]]
-            dynamic = []
-            h_xxz = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
-            emin, emax = h_xxz.eigsh(
-                k=2, which="BE", maxiter=1e4, return_eigenvectors=False
-            )
-            self.ground_energy = emin
+        QUSPIN_MAX_QUBITS = 16 # Let's not try ED on a system that's too large.
+        if self.ground_energy is None: 
+            if self.n <= QUSPIN_MAX_QUBITS:
+                # Define Hamiltonian in Quspin
+                hz = 0  # z external field
+                basis = spin_basis_1d(l, pauli=True)
+                j_zz = [[j_z, i, i + 1] for i in range(l - 1)]  # OBC
+                j_xy = [[j_xy / 2.0, i, i + 1] for i in range(l - 1)]  # OBC
+                static = [["+-", j_xy], ["-+", j_xy], ["zz", j_zz]]
+                dynamic = []
+                h_xxz = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
+                emin, emax = h_xxz.eigsh(
+                    k=2, which="BE", maxiter=1e4, return_eigenvectors=False
+                )
+                self.ground_energy = emin
+            else:
+                warn(f"Did not use Quspin because n={self.n} >= {QUSPIN_MAX_QUBITS}.")
+                self.ground_energy = None
 
         neel_state_cb = [i % 2 for i in range(l)]
         neel_state = ket_to_vector(neel_state_cb)
