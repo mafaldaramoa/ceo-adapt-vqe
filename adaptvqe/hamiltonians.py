@@ -7,8 +7,11 @@ try:
     from quspin.basis import spin_basis_1d
 except:
     pass
-    # Quspin not installed. Will try to use precalculated Hamiltonian ground energies if necessary.
-    # Todo: fix, it's ugly
+
+from quimb.tensor import DMRG
+from adaptvqe.tensor_helpers import pauli_sum_to_mpo
+import openfermion as of
+import cirq
 
 from openfermion import (
     QubitOperator,
@@ -106,7 +109,9 @@ class XXZHamiltonian:
     See https://doi.org/10.48550/arXiv.2206.14215.
     """
 
-    def __init__(self, j_xy, j_z, l):
+    def __init__(self, j_xy, j_z, l, diag_mode: str="quspin", **kwargs):
+
+        assert diag_mode in ["quspin", "quimb"]
 
         self.description = f"XXZ_{j_xy}_{j_z}"
 
@@ -123,9 +128,10 @@ class XXZHamiltonian:
         # Try to load precomputed ground energy
         self.ground_energy = self.load_ground_energy(l, j_z, j_xy)
 
-        QUSPIN_MAX_QUBITS = 16 # Let's not try ED on a system that's too large.
         if self.ground_energy is None: 
-            if self.n <= QUSPIN_MAX_QUBITS:
+            print("No pre-computed energy for given parameters.")
+            if diag_mode == "quspin":
+                print("Solving by ED with quspin.")
                 # Define Hamiltonian in Quspin
                 hz = 0  # z external field
                 basis = spin_basis_1d(l, pauli=True)
@@ -138,9 +144,26 @@ class XXZHamiltonian:
                     k=2, which="BE", maxiter=1e4, return_eigenvectors=False
                 )
                 self.ground_energy = emin
+            elif diag_mode == "quimb":
+                print("Solving by DMRG with quimb.")
+                if "max_mps_bond" in kwargs.keys():
+                    max_mps_bond = kwargs["max_mps_bond"]
+                else:
+                    max_mps_bond = 100
+                if "max_mpo_bond" in kwargs.keys():
+                    max_mpo_bond = kwargs["max_mpo_bond"]
+                else:
+                    max_mpo_bond = 300
+                ham_cirq = of.transforms.qubit_operator_to_pauli_sum(h)
+                qs = cirq.LineQubit.range(self.n)
+                ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
+                dmrg = DMRG(ham_mpo, bond_dims=max_mps_bond)
+                converged = dmrg.solve()
+                if not converged:
+                    print("DMRG did not converge!")
+                self.ground_energy = dmrg.energy
             else:
-                warn(f"Did not use Quspin because n={self.n} >= {QUSPIN_MAX_QUBITS}.")
-                self.ground_energy = None
+                raise ValueError(f"Got a bad diagonalization mode {diag_mode}. Pass 'quspin' or 'quimb'.")
 
         neel_state_cb = [i % 2 for i in range(l)]
         neel_state = ket_to_vector(neel_state_cb)
