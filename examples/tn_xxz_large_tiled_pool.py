@@ -58,7 +58,7 @@ for new_l in system_sizes:
         custom_hamiltonian=new_h,
         verbose=True,
         threshold=10**-2,
-        max_adapt_iter=50,
+        max_adapt_iter=100,
         max_opt_iter=10000,
         sel_criterion="gradient",
         recycle_hessian=False,
@@ -69,7 +69,7 @@ for new_l in system_sizes:
     end_time = perf_counter_ns()
     elapsed_time = end_time - start_time
     tiled_runtimes[new_l] = elapsed_time
-    tiled_energies[new_l] = my_adapt.data.result.energy
+    tiled_energies[new_l] = my_adapt.data.result.energy.real
     error = (new_h.ground_energy - my_adapt.data.result.energy) / new_h.ground_energy
     print("Final relative error:", error)
 
@@ -78,4 +78,5 @@ records = []
 for l in system_sizes:
     records.append((l, tiled_dmrg_energies[l], tiled_energies[l], tiled_runtimes[l]))
 df = pd.DataFrame.from_records(records, columns=["l", "dmrg_energy", "adapt_energy", "runtime"])
+df.index.name="i"
 df.to_csv("../data/tn_stress_results.csv")
