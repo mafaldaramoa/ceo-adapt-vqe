@@ -1,9 +1,15 @@
 from time import perf_counter_ns
+import argparse
 import h5py
 import numpy as np
 from adaptvqe.pools import FullPauliPool, TiledPauliPool
 from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt, LinAlgAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
+
+parser = argparse.ArgumentParser()
+parser.add_argument("nqubits", type=int, help="Number of qubits/spins.")
+parser.add_argument("output_file", type=str, help="HDF5 output file.")
+args = parser.parse_args()
 
 n_iter = 4
 max_mpo_bond = 100
@@ -45,7 +51,7 @@ print(f"Pool will be tiled from {len(ixs)} ops")
 source_ops = [pool.operators[index].operator for index in ixs]
 
 # Now go to the larger size.
-new_l = 32
+new_l = args["nqubits"]
 j_xy = 1
 j_z = 1
 h = XXZHamiltonian(
@@ -85,7 +91,7 @@ for _ in range(n_iter):
 adapt_energies = np.array(adapt_energies)
 adapt_times = np.array(adapt_times)
 
-f = h5py.File("large_system.hdf5", "w")
+f = h5py.File(args["output_file"], "w")
 f.create_dataset("dmrg_energy", data=dmrg_energy)
 f.create_dataset("adapt_energies", data=adapt_energies)
 f.create_dataset("adapt_times", data=adapt_times)
