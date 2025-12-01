@@ -43,7 +43,7 @@ print(f"Pool will be tiled from {len(ixs)} ops")
 tiled_energies = {}
 tiled_runtimes = {}
 tiled_dmrg_energies = {}
-system_sizes = [5 * i for i in range(1, 6)]
+system_sizes = [5 * i for i in range(1, 7)]
 for new_l in system_sizes:
     # Tile the operators to form a pool for a larger problem instance and run ADAPT-VQE with this pool
     source_ops = [pool.operators[index].operator for index in ixs]
