@@ -81,7 +81,7 @@ for _ in range(n_iter):
 adapt_energies = np.array(adapt_energies)
 adapt_times = np.array(adapt_times)
 
-f = h5py.File("../data/large_system.hdf5", "w")
+f = h5py.File("large_system.hdf5", "w")
 f.create_dataset("dmrg_energy", data=dmrg_energy)
 f.create_dataset("adapt_energies", data=adapt_energies)
 f.create_dataset("adapt_times", data=adapt_times)
