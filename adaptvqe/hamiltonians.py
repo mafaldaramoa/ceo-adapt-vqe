@@ -109,7 +109,7 @@ class XXZHamiltonian:
     See https://doi.org/10.48550/arXiv.2206.14215.
     """
 
-    def __init__(self, j_xy, j_z, l, diag_mode: str="quspin", **kwargs):
+    def __init__(self, j_xy, j_z, l, store_ref_vector: bool=True, diag_mode: str="quspin", **kwargs):
 
         assert diag_mode in ["quspin", "quimb"]
 
@@ -166,9 +166,10 @@ class XXZHamiltonian:
                 raise ValueError(f"Got a bad diagonalization mode {diag_mode}. Pass 'quspin' or 'quimb'.")
 
         neel_state_cb = [i % 2 for i in range(l)]
-        neel_state = ket_to_vector(neel_state_cb)
-        neel_state = csc_matrix(neel_state).transpose()
-        self.ref_state = neel_state
+        if store_ref_vector:
+            neel_state = ket_to_vector(neel_state_cb)
+            neel_state = csc_matrix(neel_state).transpose()
+            self.ref_state = neel_state
         self.tn_ref_state = computational_basis_mps(neel_state_cb)
         self.ref_det = neel_state_cb
 

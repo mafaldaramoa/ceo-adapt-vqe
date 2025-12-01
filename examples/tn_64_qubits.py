@@ -48,7 +48,11 @@ source_ops = [pool.operators[index].operator for index in ixs]
 new_l = 32
 j_xy = 1
 j_z = 1
-h = XXZHamiltonian(j_xy, j_z, new_l, diag_mode="quimb", max_mpo_bond=max_mpo_bond, max_mps_bond=dmrg_mps_bond)
+h = XXZHamiltonian(
+    j_xy, j_z, new_l,
+    store_ref_vector=False,
+    diag_mode="quimb", max_mpo_bond=max_mpo_bond, max_mps_bond=dmrg_mps_bond
+)
 dmrg_energy = h.ground_energy
 print(f"Got DMRG energy {dmrg_energy:4.5e}")
 tiled_pool = TiledPauliPool(n=new_l, source_ops=source_ops)
