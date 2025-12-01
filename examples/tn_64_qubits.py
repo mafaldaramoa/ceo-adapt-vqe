@@ -51,7 +51,7 @@ print(f"Pool will be tiled from {len(ixs)} ops")
 source_ops = [pool.operators[index].operator for index in ixs]
 
 # Now go to the larger size.
-new_l = args["nqubits"]
+new_l = args.nqubits
 j_xy = 1
 j_z = 1
 h = XXZHamiltonian(
@@ -91,7 +91,7 @@ for _ in range(n_iter):
 adapt_energies = np.array(adapt_energies)
 adapt_times = np.array(adapt_times)
 
-f = h5py.File(args["output_file"], "w")
+f = h5py.File(args.output_file, "w")
 f.create_dataset("dmrg_energy", data=dmrg_energy)
 f.create_dataset("adapt_energies", data=adapt_energies)
 f.create_dataset("adapt_times", data=adapt_times)
