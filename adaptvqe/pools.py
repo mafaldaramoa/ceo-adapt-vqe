@@ -476,10 +476,14 @@ class OperatorPool(metaclass=abc.ABCMeta):
     def get_mpo_op(self, index):
         """Convert the qubit operator form to an MPO."""
 
-        qubit_op = self.get_q_op(index)
-        qubit_op_cirq = of.transforms.qubit_operator_to_pauli_sum(qubit_op)
-        qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, self.all_qubits_cirq, self.max_mpo_bond)
-        return qubit_op_mpo
+        # qubit_op = self.get_q_op(index)
+        # qubit_op_cirq = of.transforms.qubit_operator_to_pauli_sum(qubit_op)
+        # qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, self.all_qubits_cirq, self.max_mpo_bond)
+        # return qubit_op_mpo
+        if self.operators[index].mpo_operator is None:
+            self.operators[index].create_mpo(qs=self.all_qubits_cirq, max_bond=self.max_mpo_bond)
+        op_mps = self.operators[index].mpo_operator
+        return op_mps
 
     def get_exp_op(self, index, coefficient=1):
         """
