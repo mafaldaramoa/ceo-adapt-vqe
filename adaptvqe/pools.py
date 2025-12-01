@@ -5,6 +5,7 @@ Created on Wed Jun 29 11:47:52 2022
 @author: mafal
 """
 
+from typing import Optional, List
 import abc
 import itertools
 import numpy as np
@@ -171,6 +172,14 @@ class PoolOperator(metaclass=abc.ABCMeta):
         dimension of operator)
         """
         self.imp_operator = get_sparse_operator(self.q_operator, self.n)
+    
+    def create_mpo(self, qs: Optional[List[cirq.Qid]]=None, max_bond: int=1):
+        """Create an MPO version of the operator."""
+
+        q_op_cirq = of.transforms.qubit_operator_to_pauli_sum(self.q_operator)
+        if qs is None:
+            qs = q_op_cirq.qubits
+        self.mpo_operator = pauli_sum_to_mpo(q_op_cirq, qs, max_bond)
 
     @property
     def f_operator(self):
@@ -439,6 +448,8 @@ class OperatorPool(metaclass=abc.ABCMeta):
         if self.operators[index].imp_operator is None:
             if self.imp_type == ImplementationType.SPARSE:
                 self.operators[index].create_sparse()
+            elif self.imp_type == ImplementationType.TENSORS:
+                self.operators[index].create_mpo()
             else:
                 raise AttributeError("PoolOperator does not have imp_operator attribute because an implementation type "
                                      "hasn't been set for this pool. "
