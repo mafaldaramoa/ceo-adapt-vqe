@@ -170,6 +170,8 @@ class XXZHamiltonian:
             neel_state = ket_to_vector(neel_state_cb)
             neel_state = csc_matrix(neel_state).transpose()
             self.ref_state = neel_state
+        else:
+            self.ref_state = None
         self.tn_ref_state = computational_basis_mps(neel_state_cb)
         self.ref_det = neel_state_cb
 
