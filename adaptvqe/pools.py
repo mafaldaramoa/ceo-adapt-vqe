@@ -108,6 +108,7 @@ class PoolOperator(metaclass=abc.ABCMeta):
         self.coef = None
         self.imp_operator = None  # implemented version (e.g. Qiskit Operator)
         self.exp_operator = None  # exponential version (e.g. trotter circuit)
+        self.mpo_operator = None
         self.grad_meas = None  # gradient observable
         self.twin_string_ops = []  # operators in the same pool with the exact same Pauli strings
         self.source_orbs = source_orbs
@@ -1388,9 +1389,12 @@ class PauliPool(SingletGSD):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         start_time = perf_counter_ns()
-        op = self.operators[index].q_operator
-        op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
-        op_mps = pauli_sum_to_mpo(op_psum, self.all_qubits_cirq, self.max_mpo_bond)
+        # op = self.operators[index].q_operator
+        # op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
+        # op_mps = pauli_sum_to_mpo(op_psum, self.all_qubits_cirq, self.max_mpo_bond)
+        if self.operators[index].mpo_operator is None:
+            self.operators[index].create_mpo(qs=self.all_qubits_cirq, max_bond=self.max_mpo_bond)
+        op_mps = self.operators[index].mpo_operator
         end_time = perf_counter_ns()
         elapsed_time = end_time - start_time
         print(f"Conversion took {elapsed_time:4.5e} ns.")
