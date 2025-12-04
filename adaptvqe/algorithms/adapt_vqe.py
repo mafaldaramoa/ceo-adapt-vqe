@@ -3886,26 +3886,7 @@ class TensorNetAdapt(AdaptVQE):
             generator (MatrixProdctOperator): the generator of the orbital rotation
         """
 
-        # TODO Should these be FermionOperators?
-        assert len(orb_params) == len(self.orb_ops)
-
-        generator = None
-        for param, op in zip(orb_params, self.orb_ops):
-
-            if not np.abs(param):
-                continue
-
-            if generator is None:
-                generator = param * op
-            else:
-                generator = generator + param * op
-
-        if generator is None:
-            # generator = np.zeros((2**self.n, 2**self.n), dtype=complex)
-            # generator = csc_matrix(generator)
-            generator = None
-
-        return generator
+        return None
 
     def save_hamiltonian(self, hamiltonian):
         """
@@ -3926,25 +3907,8 @@ class TensorNetAdapt(AdaptVQE):
         See https://doi.org/10.48550/arXiv.2212.11405
         """
 
-        n_spatial = int(self.n / 2)
-
-        k = 0
         self.orb_ops = []
         self.sparse_orb_ops = []
-
-        if not self.orb_opt:
-            return
-
-        for p in range(n_spatial):
-            for q in range(p + 1, n_spatial):
-                new_op = create_spin_adapted_one_body_op(p, q)
-                # new_op = get_sparse_operator(new_op, n_spatial * 2)
-                self.orb_ops.append(new_op)
-                k += 1
-
-        assert len(self.orb_ops) == int((n_spatial * (n_spatial - 1)) / 2)
-
-        return
 
     def observable_to_measurement(self, observable):
         return observable
@@ -3978,7 +3942,7 @@ class TensorNetAdapt(AdaptVQE):
             raise ValueError(f"Method {method} is not supported.")
 
         if self.orb_opt:
-            raise NotImplementedError
+            raise NotImplementedError("This class does not implement orbital rotations.")
 
         if self.data is not None:
             coefficients = self.coefficients.copy()
@@ -4039,7 +4003,7 @@ class TensorNetAdapt(AdaptVQE):
             raise ValueError(f"Method {method} is not supported.")
 
         if self.orb_opt:
-            raise NotImplementedError
+            raise NotImplementedError("This class does not support orbital rotations.")
 
         if self.data is not None:
             coefficients = self.coefficients.copy()
@@ -4120,14 +4084,7 @@ class TensorNetAdapt(AdaptVQE):
         # Define orbital rotation
         hamiltonian = self.hamiltonian_mpo
         if orb_params is not None:
-            # TODO How can we translate this to TN setting?
-            generator = self.create_orb_rotation_generator(orb_params)
-            orb_rotation = expm(generator)
-            hamiltonian = orb_rotation.transpose().conj() * hamiltonian * orb_rotation
-        else:
-            # orb_rotation = np.eye(2**self.n)
-            # orb_rotation = csc_matrix(orb_rotation)
-            orb_rotation = hamiltonian.identity()
+            raise NotImplementedError("This class does not implement orbital rotations.")
 
         gradients = []
         state = self.compute_state(coefficients, indices)
@@ -4150,7 +4107,6 @@ class TensorNetAdapt(AdaptVQE):
             gradient = 2 * (left_matrix @ right_matrix.gate_with_mpo(operator)).real
             gradients.append(gradient)
 
-        right_matrix = right_matrix.gate_with_mpo(orb_rotation)
         left_matrix = right_matrix.H
 
         # Orbital gradients
@@ -4208,12 +4164,4 @@ class TensorNetAdapt(AdaptVQE):
             orb_params (list): the parameters for the orbital tansformation
         """
 
-        generator = self.create_orb_rotation_generator(orb_params)
-        if generator is not None:
-            orb_rotation = expm(generator)
-            self.hamiltonian = (
-                orb_rotation.transpose().conj().dot(self.hamiltonian).dot(orb_rotation)
-            )
-        self.energy_meas = self.observable_to_measurement(self.hamiltonian)
-
-        return
+        pass
