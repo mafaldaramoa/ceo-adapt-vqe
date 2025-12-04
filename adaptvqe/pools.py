@@ -1392,18 +1392,10 @@ class PauliPool(SingletGSD):
     def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState, max_bond=None):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
-        # start_time = perf_counter_ns()
-        # op = self.operators[index].q_operator
-        # op_psum = cirq.PauliSum.from_pauli_strings(of.transforms.qubit_operator_to_pauli_sum(op))
-        # op_mps = pauli_sum_to_mpo(op_psum, self.all_qubits_cirq, self.max_mpo_bond)
         if self.operators[index].mpo_operator is None:
             self.operators[index].create_mpo(qs=self.all_qubits_cirq, max_bond=self.max_mpo_bond)
         op_mps = self.operators[index].mpo_operator
-        # end_time = perf_counter_ns()
-        # elapsed_time = end_time - start_time
-        # print(f"Conversion took {elapsed_time:4.5e} ns.")
     
-        # start_time = perf_counter_ns()
         # There is a weird thing in quimb where we can't multiply an MPS by 0.
         # If coefficient is near 0, replace sin(coefficient) -> 1e-18.
         if abs(coefficient) <= 1e-18:
@@ -1414,9 +1406,6 @@ class PauliPool(SingletGSD):
         # Optionally compress the MPS.
         if max_bond is not None:
             mult_state.compress(max_bond=max_bond)
-        # end_time = perf_counter_ns()
-        # elapsed_time = end_time - start_time
-        # print(f"Multiplication took {elapsed_time:4.5e} ns.")
         return mult_state
 
     def get_circuit(self, indices, coefficients):
