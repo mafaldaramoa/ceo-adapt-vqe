@@ -8,10 +8,10 @@ from adaptvqe.hamiltonians import XXZHamiltonian
 
 parser = argparse.ArgumentParser()
 parser.add_argument("nqubits", type=int, help="Number of qubits/spins.")
+parser.add_argument("n_rounds", type=int, help="Number of rounds of optimization.")
 parser.add_argument("output_file", type=str, help="HDF5 output file.")
 args = parser.parse_args()
 
-n_iter = 4
 max_mpo_bond = 100
 dmrg_mps_bond = 5 
 adapt_mps_bond = 5
@@ -80,7 +80,7 @@ tn_adapt.initialize()
 
 adapt_energies = []
 adapt_times = []
-for _ in range(n_iter):
+for _ in range(args.n_rounds):
     start_time = perf_counter_ns()
     tn_adapt.run_iteration()
     end_time = perf_counter_ns()
