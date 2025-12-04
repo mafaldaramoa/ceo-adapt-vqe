@@ -50,3 +50,10 @@ tn_adapt.run()
 data = tn_adapt.data
 qc = pool.get_circuit(data.result.ansatz.indices, data.result.ansatz.coefficients)
 print("Depth:", qc.depth())
+
+energy_err = abs(tn_adapt.energy - my_adapt.energy)
+print(f"Energy difference: {energy_err:4.5e}")
+print("LinAlg indices:\n", my_adapt.indices)
+print("LinAlg coefficients:\n", my_adapt.coefficients)
+print("TN indices:\n", tn_adapt.indices)
+print("TN coefficients:\n", tn_adapt.coefficients)
