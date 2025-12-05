@@ -1,4 +1,5 @@
 import numpy as np
+from quimb.tensor.tensor_1d import MatrixProductState
 from adaptvqe.pools import FullPauliPool, TiledPauliPool
 from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt, LinAlgAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
@@ -61,3 +62,9 @@ print("TN indices:\n", tn_adapt.indices)
 for idx in tn_adapt.indices:
     print(pool.get_q_op(idx))
 print("TN coefficients:\n", tn_adapt.coefficients)
+
+linalg_state = my_adapt.state.todense().reshape((2 ** l,))
+linalg_state_mps = MatrixProductState.from_dense(linalg_state)
+tn_state = tn_adapt.state
+overlap = linalg_state_mps.H @ tn_state
+print("Overlap of final states:", overlap)
