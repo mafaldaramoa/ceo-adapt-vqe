@@ -1,10 +1,31 @@
-from typing import List
+from typing import List, Optional
 import numpy as np
 import cirq
 import openfermion as of
 import quimb.tensor as qtn
 from quimb.tensor.tensor_1d import MatrixProductOperator, MatrixProductState
 from quimb.tensor.tensor_1d_compress import tensor_network_1d_compress_direct
+
+def tensor_product_mpo(matrices: List[np.ndarray]) -> MatrixProductOperator:
+    """Returns an MPO of the form M1 otimes M2 otimes ... otimes Mn,
+    where Mi is a matrix. This MPO has bond dimension 1."""
+
+    if len(matrices) == 0:
+        raise ValueError("No matrices were passed.")
+
+    tensors: List[np.ndarray] = []
+    for i, m in enumerate(matrices):
+        if i == 0:
+            if len(matrices) != 1:
+                tensors.append(m.reshape((2, 2, 1)))
+            else:
+                tensors.append(m)
+        elif i == len(matrices) - 1:
+            tensors.append(m.reshape((1, 2, 2)))
+        else:
+            tensors.append(m.reshape((1, 2, 2, 1)))
+    return MatrixProductOperator(tensors, shape="ludr")
+
 
 def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> MatrixProductOperator:
     """Convert a Pauli string to a matrix product operator."""
@@ -22,15 +43,7 @@ def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> Matrix
         else: # pauli_int == 3
             matrices.append(cirq.unitary(cirq.Z))
     # Convert the matrices into tensors. We have a bond dim chi=1 for a Pauli string MPO.
-    tensors: List[np.ndarray] = []
-    for i, m in enumerate(matrices):
-        if i == 0:
-            tensors.append(m.reshape((2, 2, 1)))
-        elif i == len(matrices) - 1:
-            tensors.append(m.reshape((1, 2, 2)))
-        else:
-            tensors.append(m.reshape((1, 2, 2, 1)))
-    return pstring.coefficient * MatrixProductOperator(tensors, shape="ludr")
+    return pstring.coefficient * tensor_product_mpo(matrices)
 
 
 def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, verbose: bool = False) -> MatrixProductOperator:
@@ -101,3 +114,26 @@ def mps_to_vector(mps: MatrixProductState) -> np.ndarray:
     contracted_tensor.transpose(*sorted_inds, inplace=True)
     tensor_data = contracted_tensor.data
     return tensor_data.reshape((tensor_data.size,))
+
+
+def qubop_to_mpo(qubop: of.QubitOperator, max_bond: int, nq: Optional[int]=None) -> MatrixProductOperator:
+    """Convert an openfermion QubitOperator to an MPO."""
+
+    if nq is None:
+        nq = of.utils.count_qubits(qubop)
+
+    for i, (paulis, coeff) in enumerate(qubop.terms.items()):
+        matrices = [np.eye(2).astype(complex) for _ in range(nq)]
+        for idx, pauli in paulis:
+            if pauli == 'X':
+                matrices[idx] = np.array([[0., 1.], [1., 0.]]).astype(complex)
+            elif pauli == 'Y':
+                matrices[idx] = np.array([[0., -1j], [1j, 0.]])
+            else: # By default this is a Z.
+                matrices[idx] = np.array([[1., 0.], [0, -1.]]).astype(complex)
+        term_mpo = tensor_product_mpo(matrices)
+        if i == 0:
+            total_mpo = coeff * term_mpo
+        else:
+            total_mpo += coeff * term_mpo
+    return total_mpo
