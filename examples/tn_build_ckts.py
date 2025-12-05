@@ -54,6 +54,10 @@ print("Depth:", qc.depth())
 energy_err = abs(tn_adapt.energy - my_adapt.energy)
 print(f"Energy difference: {energy_err:4.5e}")
 print("LinAlg indices:\n", my_adapt.indices)
+for idx in my_adapt.indices:
+    print(pool.get_q_op(idx))
 print("LinAlg coefficients:\n", my_adapt.coefficients)
 print("TN indices:\n", tn_adapt.indices)
+for idx in tn_adapt.indices:
+    print(pool.get_q_op(idx))
 print("TN coefficients:\n", tn_adapt.coefficients)
