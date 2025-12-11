@@ -28,7 +28,7 @@ from ..matrix_tools import ket_to_vector
 from ..minimize import minimize_bfgs
 from ..pools import ImplementationType
 from ..utils import bfgs_update
-from ..tensor_helpers import computational_basis_mps, pauli_sum_to_mpo, qubop_to_mpo
+from ..tensor_helpers import computational_basis_mps, qubop_to_mpo
 
 class AdaptVQE(metaclass=abc.ABCMeta):
     """
@@ -3898,8 +3898,6 @@ class TensorNetAdapt(AdaptVQE):
         """
 
         self.hamiltonian = hamiltonian
-        hamiltonian_cirq = of.transforms.qubit_operator_to_pauli_sum(hamiltonian)
-        # self.hamiltonian_mpo = pauli_sum_to_mpo(hamiltonian_cirq, hamiltonian_cirq.qubits, self.max_mpo_bond)
         self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
 
     def create_orb_rotation_ops(self):

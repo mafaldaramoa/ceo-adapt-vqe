@@ -9,9 +9,8 @@ except:
     pass
 
 from quimb.tensor import DMRG
-from adaptvqe.tensor_helpers import pauli_sum_to_mpo, qubop_to_mpo
+from adaptvqe.tensor_helpers import qubop_to_mpo
 import openfermion as of
-import cirq
 
 from openfermion import (
     QubitOperator,

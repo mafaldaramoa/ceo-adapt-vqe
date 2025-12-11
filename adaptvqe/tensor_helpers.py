@@ -1,6 +1,5 @@
 from typing import List, Optional
 import numpy as np
-import cirq
 import openfermion as of
 import quimb.tensor as qtn
 from quimb.tensor.tensor_1d import MatrixProductOperator, MatrixProductState
@@ -25,47 +24,6 @@ def tensor_product_mpo(matrices: List[np.ndarray]) -> MatrixProductOperator:
         else:
             tensors.append(m.reshape((1, 2, 2, 1)))
     return MatrixProductOperator(tensors, shape="ludr")
-
-
-def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> MatrixProductOperator:
-    """Convert a Pauli string to a matrix product operator."""
-
-    # Make a list of matrices for each operator in the string.
-    ps_dense = pstring.dense(qs)
-    matrices: List[np.ndarray] = []
-    for pauli_int in ps_dense.pauli_mask:
-        if pauli_int == 0:
-            matrices.append(np.eye(2))
-        elif pauli_int == 1:
-            matrices.append(cirq.unitary(cirq.X))
-        elif pauli_int == 2:
-            matrices.append(cirq.unitary(cirq.Y))
-        else: # pauli_int == 3
-            matrices.append(cirq.unitary(cirq.Z))
-    # Convert the matrices into tensors. We have a bond dim chi=1 for a Pauli string MPO.
-    return pstring.coefficient * tensor_product_mpo(matrices)
-
-
-def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, verbose: bool = False) -> MatrixProductOperator:
-    """Convert a Pauli sum to an MPO."""
-    nterms = len(psum)
-    for i, p in enumerate(psum):
-        if verbose:
-            print(f"Status: On term {i + 1} / {nterms}", end="\r")
-        if i == 0:
-            mpo = pauli_string_to_mpo(p, qs)
-        else:
-            # mpo += pauli_string_to_mpo(p, qs)
-            ps_mpo = pauli_string_to_mpo(p, qs)
-            if len(mpo.tensors) == 1 and len(ps_mpo.tensors) == 1:
-                # This is a patch because adding single-site MPOs doesn't seem to work in quimb.
-                m1 = mpo.tensors[0].data
-                m2 = ps_mpo.tensors[0].data
-                mpo = MatrixProductOperator.from_dense(m1 + m2)
-            else:
-                mpo += ps_mpo
-            tensor_network_1d_compress_direct(mpo, max_bond=max_bond, inplace=True)
-    return mpo
 
 
 def mpo_mps_exepctation(mpo: MatrixProductOperator, mps: MatrixProductState) -> complex:
