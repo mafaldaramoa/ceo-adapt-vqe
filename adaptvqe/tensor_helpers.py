@@ -55,7 +55,15 @@ def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, ver
         if i == 0:
             mpo = pauli_string_to_mpo(p, qs)
         else:
-            mpo += pauli_string_to_mpo(p, qs)
+            # mpo += pauli_string_to_mpo(p, qs)
+            ps_mpo = pauli_string_to_mpo(p, qs)
+            if len(mpo.tensors) == 1 and len(ps_mpo.tensors) == 1:
+                # This is a patch because adding single-site MPOs doesn't seem to work in quimb.
+                m1 = mpo.tensors[0].data
+                m2 = ps_mpo.tensors[0].data
+                mpo = MatrixProductOperator.from_dense(m1 + m2)
+            else:
+                mpo += ps_mpo
             tensor_network_1d_compress_direct(mpo, max_bond=max_bond, inplace=True)
     return mpo
 
@@ -135,5 +143,12 @@ def qubop_to_mpo(qubop: of.QubitOperator, max_bond: int, nq: Optional[int]=None)
         if i == 0:
             total_mpo = coeff * term_mpo
         else:
-            total_mpo += coeff * term_mpo
+            # total_mpo += coeff * term_mpo
+            if len(total_mpo.tensors) == 1 and len(term_mpo.tensors) == 1:
+                m1 = total_mpo.tensors[0].data
+                m2 = coeff * term_mpo.tensors[0].data
+                total_mpo = MatrixProductOperator.from_dense(m1 + m2)
+            else:
+                total_mpo += coeff * term_mpo
+            tensor_network_1d_compress_direct(total_mpo, max_bond=max_bond, inplace=True)
     return total_mpo
