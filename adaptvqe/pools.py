@@ -38,7 +38,7 @@ from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_c
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
 from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
-from .tensor_helpers import pauli_sum_to_mpo
+from .tensor_helpers import pauli_sum_to_mpo, qubop_to_mpo
 
 # For debugging!
 from time import perf_counter_ns
@@ -177,13 +177,14 @@ class PoolOperator(metaclass=abc.ABCMeta):
         """
         self.imp_operator = get_sparse_operator(self.q_operator, self.n)
     
-    def create_mpo(self, qs: Optional[List[cirq.Qid]]=None, max_bond: int=1):
+    def create_mpo(self, nq: Optional[int]=None, max_bond: int=1):
         """Create an MPO version of the operator."""
 
-        q_op_cirq = of.transforms.qubit_operator_to_pauli_sum(self.q_operator)
-        if qs is None:
-            qs = q_op_cirq.qubits
-        self.mpo_operator = pauli_sum_to_mpo(q_op_cirq, qs, max_bond)
+        # q_op_cirq = of.transforms.qubit_operator_to_pauli_sum(self.q_operator)
+        # if qs is None:
+        #     qs = q_op_cirq.qubits
+        # self.mpo_operator = pauli_sum_to_mpo(q_op_cirq, qs, max_bond)
+        self.mpo_operator = qubop_to_mpo(self.q_operator, max_bond, nq)
 
     @property
     def f_operator(self):
@@ -473,7 +474,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         """
         return self.operators[index].q_operator
     
-    def get_mpo_op(self, index):
+    def get_mpo_op(self, index, nq: Optional[int]=None):
         """Convert the qubit operator form to an MPO."""
 
         # qubit_op = self.get_q_op(index)
@@ -481,7 +482,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         # qubit_op_mpo = pauli_sum_to_mpo(qubit_op_cirq, self.all_qubits_cirq, self.max_mpo_bond)
         # return qubit_op_mpo
         if self.operators[index].mpo_operator is None:
-            self.operators[index].create_mpo(qs=self.all_qubits_cirq, max_bond=self.max_mpo_bond)
+            self.operators[index].create_mpo(nq=nq, max_bond=self.max_mpo_bond)
         op_mps = self.operators[index].mpo_operator
         return op_mps
 
@@ -1357,9 +1358,10 @@ class PauliPool(SingletGSD):
         op = self.operators[index].q_operator
         nq = of.utils.count_qubits(op)
         exp_op = np.cos(coefficient) * of.qubitoperator.identity(nq) + np.sin(coefficient) * op
-        exp_op_cirq = of.transforms.qubit_operator_to_pauli_sum(exp_op)
-        qs = exp_op_cirq.qubits
-        exp_op_mpo = pauli_sum_to_mpo(exp_op_cirq, qs)
+        # exp_op_cirq = of.transforms.qubit_operator_to_pauli_sum(exp_op)
+        # qs = exp_op_cirq.qubits
+        # exp_op_mpo = pauli_sum_to_mpo(exp_op_cirq, qs)
+        exp_op_mpo = qubop_to_mpo(exp_op, self.max_mpo_bond)
         return exp_op_mpo
 
     def expm_mult(self, coefficient, index, other):

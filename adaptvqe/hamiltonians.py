@@ -9,7 +9,7 @@ except:
     pass
 
 from quimb.tensor import DMRG
-from adaptvqe.tensor_helpers import pauli_sum_to_mpo
+from adaptvqe.tensor_helpers import pauli_sum_to_mpo, qubop_to_mpo
 import openfermion as of
 import cirq
 
@@ -156,7 +156,8 @@ class XXZHamiltonian:
                     max_mpo_bond = 300
                 ham_cirq = of.transforms.qubit_operator_to_pauli_sum(h)
                 qs = cirq.LineQubit.range(self.n)
-                ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
+                # ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
+                ham_mpo = qubop_to_mpo(h, max_mpo_bond)
                 dmrg = DMRG(ham_mpo, bond_dims=max_mps_bond)
                 converged = dmrg.solve()
                 if not converged:
