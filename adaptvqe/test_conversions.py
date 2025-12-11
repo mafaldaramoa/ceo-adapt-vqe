@@ -73,6 +73,13 @@ class TestQubOpToMPO(unittest.TestCase):
         qubop_mpo = qubop_to_mpo(qubop, 100)
         qubop_matrix = of.linalg.get_sparse_operator(qubop).todense()
         self.assertTrue(np.allclose(qubop_mpo.to_dense(), qubop_matrix))
+    
+    def nq_greater_than_operator(self):
+        qubop = 0.5 * of.QubitOperator("X0") - 0.2 * of.QubitOperator("Y2")
+        qubop_mpo = qubop_to_mpo(qubop, 4, 100)
+        qubop_matrix = of.linalg.get_sparse_operator(qubop).todense()
+        qubop_matrix_full = np.kron(qubop_matrix, np.eye(4))
+        self.assertTrue(np.allclose(qubop_mpo.to_dense(), qubop_matrix_full))
 
 
 if __name__ == "__main__":
