@@ -3898,7 +3898,11 @@ class TensorNetAdapt(AdaptVQE):
         """
 
         self.hamiltonian = hamiltonian
-        self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
+        if isinstance(hamiltonian, of.QubitOperator):
+            self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
+        else:
+            ham_jw = of.transforms.jordan_wigner(hamiltonian)
+            self.hamiltonian_mpo = qubop_to_mpo(ham_jw, self.max_mpo_bond)
 
     def create_orb_rotation_ops(self):
         """

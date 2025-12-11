@@ -13,8 +13,6 @@ from copy import copy
 from warnings import warn
 from itertools import product
 
-import cirq
-
 import openfermion as of
 from openfermion import (FermionOperator,
                          get_sparse_operator,
@@ -26,12 +24,14 @@ from openfermion import (FermionOperator,
 from openfermion.transforms import freeze_orbitals
 
 from qiskit import QuantumCircuit
+from qiskit.qasm2 import dumps
 
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
 from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
+import quimb.tensor as qtn
 
 from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count,
                        paired_f_swap_network_orderings, prepare_lnn_op, count_qe_lnn_swaps)
@@ -344,7 +344,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_circuit(self, coefficients, indices):
+    def get_circuit(self, indices, coefficients):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments, as a Qiskit QuantumCircuit.
         Arguments:
@@ -546,6 +546,18 @@ class OperatorPool(metaclass=abc.ABCMeta):
             m = unitary.dot(m)
             m = m.real
             return m
+        
+    def tn_expm_mult_state(self, coefficient, index, state, max_bond):
+        """Multiply the state by the exponential of a pool operator. In the general case,
+        this is done by getting the circuit for the exponential of the operator and using
+        TEBD to multiply it by the states."""
+
+        evolution_circuit = self.get_circuit([index], [coefficient])
+        qasm_str = dumps(evolution_circuit)
+        circuit_mps = qtn.circuit.CircuitMPS.from_openqasm2_str(
+            qasm_str, psi0=state, max_bond=max_bond, progbar=False
+        )
+        return circuit_mps.psi
 
     def adj_expm_mult(self, coefficient, index, other):
         """
