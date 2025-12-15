@@ -414,10 +414,6 @@ class OperatorPool(metaclass=abc.ABCMeta):
     def all_qubits(self):
         return set.union(*[self.get_qubits(idx) for idx in range(len(self.operators))])
     
-    @property
-    def all_qubits_cirq(self):
-        return [cirq.LineQubit(idx) for idx in self.all_qubits]
-
     def get_parents(self, index):
         """
         Applicable only to CEO operators.
@@ -1396,7 +1392,7 @@ class PauliPool(SingletGSD):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         if self.operators[index].mpo_operator is None:
-            self.operators[index].create_mpo(qs=self.all_qubits_cirq, max_bond=self.max_mpo_bond)
+            self.operators[index].create_mpo(max_bond=self.max_mpo_bond)
         op_mps = self.operators[index].mpo_operator
     
         # There is a weird thing in quimb where we can't multiply an MPS by 0.
