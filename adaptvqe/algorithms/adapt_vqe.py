@@ -3818,6 +3818,9 @@ class TensorNetAdapt(AdaptVQE):
         if len(observable.tensors) != len(ket.tensors):
             warn(f"Observable has {len(observable.tensors)} tensors but MPS has {len(ket.tensors)}.")
 
+        if len(observable.tensors) != len(ket.tensors):
+            warn(f"Observable has {(len(observable.tensors))} tensors and state has {len(ket.tensors)}.")
+
         obs_on_ket = observable.apply(ket)
         exp_value = (ket.H @ obs_on_ket).real
 
@@ -3872,6 +3875,12 @@ class TensorNetAdapt(AdaptVQE):
             state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond)
         if bra:
             state = state.H
+
+        # For debug
+        print("In compute_state.")
+        fidelity = abs(state.H @ ref_state) ** 2
+        print("coefficients=", coefficients)
+        print(f"Fidelity of generated state: {fidelity:4.5e}")
 
         return state
 
