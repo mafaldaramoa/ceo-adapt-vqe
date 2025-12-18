@@ -23,7 +23,7 @@ from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
 
 from .adapt_data import AdaptData
 from ..chemistry import chemical_accuracy, get_hf_det, create_spin_adapted_one_body_op
-from ..circuits import prepare_lnn_op, count_qe_lnn_swaps, swap_qe_lnn
+from ..circuits import prepare_lnn_op, count_lnn_swaps, swap_lnn, get_swaps
 from ..matrix_tools import ket_to_vector
 from ..minimize import minimize_bfgs
 from ..pools import ImplementationType
@@ -50,6 +50,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         progressive_opt=False,
         candidates=1,
         lnn=False,
+        lnn_qiskit=False,
         orb_opt=False,
         sel_criterion="gradient",
         recycle_hessian=False,
@@ -79,7 +80,10 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 or in a phased manner
             candidates (int): The number of candidates to consider per iteration. From these, one will be selected based
                 on the selection criterion
-            lnn (bool): if to consider a linear nearest neighbour architecture
+            lnn (bool): if to implement circuits on a linear nearest neighbour architecture using (possibly fermionic)
+                swap networks
+            lnn_qiskit (bool): if to implement circuits on a linear nearest neighbour architecture using Qiskit's
+                transpile
             orb_opt (bool): Whether to perform orbital optimization (see https://doi.org/10.48550/arXiv.2212.11405)
             sel_criterion (str): The selection criterion. If it is gradient-based, selection will be done among all
                 operators. In this case, candidates must be set to 1. If it is energy-based, selection will be done only
@@ -118,6 +122,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.progressive_opt = progressive_opt
         self.candidates = candidates
         self.lnn = lnn
+        self.lnn_qiskit = lnn_qiskit
         self.orb_opt = orb_opt
         self.sel_criterion = sel_criterion
         self.recycle_hessian = recycle_hessian
@@ -154,8 +159,11 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             self.inv_hessian = None
 
         self.verify_inputs()
-        # Initial layout: mode i corresponds to qubit i
-        self.qubit_order = list(range(self.n))
+        if previous_data is not None:
+            self.qubit_order = previous_data.evolution.qubit_orders[-1]
+        else:
+            # Initial layout: mode i corresponds to qubit i
+            self.qubit_order = list(range(self.n))
 
         if self.verbose:
             print(f"\n{self.name} prepared with the following settings:")
@@ -242,6 +250,17 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             raise NotImplementedError(
                 "1D optimization is not implemented for CEO pools other than OVP-CEO."
             )
+
+        if self.lnn_qiskit and self.lnn:
+            raise ValueError("Linear nearest neighbor circuits must either be constructed with swap networks or with"
+                             " Qiskit's transpiler.")
+        if self.lnn_qiskit and self.pool.fermionic_swaps:
+            raise ValueError("Pools defined for fermionic swap circuits must be implemented that way. See lnn kwarg.\n"
+                             "You may use a GSD pool with Qiskit's transpiler using the GSD class.")
+        if self.lnn and "QE" not in self.pool.name and "CEO" not in self.pool.name:
+            raise ValueError("lnn flag employs swap circuits which are only defined for qubit excitation and coupled "
+                             "exchange operator pools. Other pools may be implemented in linear nearest neighbor "
+                             "connectivity using Qiskit (see lnn_qiskit kwarg).")
 
     def initialize_hamiltonian(self):
         """
@@ -348,6 +367,10 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             self.file_name += "_pen_cnots"
         if self.convergence_criterion != "total_g_norm":
             self.file_name += f"_{self.convergence_criterion}_cc"
+        if self.lnn:
+            self.file_name += "_swaps"
+        if self.lnn_qiskit:
+            self.file_name += "_qiskit_tspl"
 
     def load(self, previous_data=None, eig_decomp=None):
         """
@@ -365,6 +388,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
             # Make sure we're continuing the run of ADAPT with the same settings
             assert self.pool.name == previous_data.pool_name
+            assert previous_data.lnn == self.lnn
+            assert previous_data.lnn_qiskit == self.lnn_qiskit
             assert bool("rec_hess" in previous_data.file_name) == self.recycle_hessian
             assert bool("tetris" in previous_data.file_name) == self.tetris
             assert bool("prog" in previous_data.file_name) == self.progressive_opt
@@ -377,10 +402,11 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 assert str(self.convergence_criterion) in previous_data.file_name
 
             # Set current state to the last iteration of the loaded data
-            self.indices = self.data.evolution.indices[-1]
-            self.coefficients = self.data.evolution.coefficients[-1]
+            self.indices = self.data.evolution.indices[-1].copy()
+            self.coefficients = self.data.evolution.coefficients[-1].copy()
             self.gradients = self.data.evolution.gradients[-1]
             self.inv_hessian = self.data.evolution.inv_hessians[-1]
+            self.qubit_order = self.data.evolution.qubit_orders[-1]
 
             # Calculate current state
             self.state = self.compute_state()
@@ -422,7 +448,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         )
         print("> Convergence threshold (gradient norm): ", self.threshold)
         print("> Maximum number of iterations: ", self.max_adapt_iter)
-        print("> candidates per iteration: ", self.candidates)
+        print("> Candidates per iteration: ", self.candidates)
+        print("> Swap-based circuits for LNN connectivity: ", self.lnn)
+        print("> Qiskit-transpiler-based circuits for LNN connectivity: ", self.lnn_qiskit)
 
     def get_state(self, coefficients=None, indices=None, ref_state=None):
         """
@@ -492,24 +520,23 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
             if index in self.pool.parent_range:
                 parent_gradients[index] = gradient
+            else:
+                total_norm += gradient**2
 
             nnz_g_parents = []
             parents = self.pool.get_parents(index)
             if parents is not None:
                 [p_index for p_index in parents if parent_gradients[p_index]]
 
-            gradient = self.penalize_gradient(gradient, index, silent,nnz_g_parents)
-
             if np.abs(gradient) < 10**-8:
                 continue
+
+            gradient = self.penalize_gradient(gradient, index, silent,nnz_g_parents)
 
             # Find the index of the operator in the ordered gradient list
             sel_gradients, sel_indices = self.place_gradient(
                 gradient, index, sel_gradients, sel_indices
             )
-
-            if index not in self.pool.parent_range:
-                total_norm += gradient**2
 
         total_norm = np.sqrt(total_norm)
 
@@ -617,12 +644,12 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             if len(nnz_g_parents) <=1:
                 # If OVP_CEO, just one QE with nonzero gradient -> implement as OVP_CEO
                 # If any other operator from another pool, the list is empty
-                penalty = self.pool.get_cnots(index,self.qubit_order,lnn=self.lnn)
+                penalty = self.pool.get_cnots(index,self.qubit_order,transpile_swap=self.lnn, transpile_qiskit_lnn=self.lnn_qiskit)
             else:
                 # There is an MVP_CEO with more than one nonzero gradient QE acting on the same spin-orbitals. If
                 # selected, this operator will be implemented with as many CNOTs as a QE
                 parent_index = self.pool.get_parents(index)[0]
-                penalty = self.pool.get_cnots(parent_index,self.qubit_order,lnn=self.lnn)
+                penalty = self.pool.get_cnots(parent_index,self.qubit_order,transpile_swap=self.lnn, transpile_qiskit_lnn=self.lnn_qiskit)
         else:
             penalty = 1
 
@@ -635,8 +662,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                     "".join(
                         [
                             f"Operator {index}: {gradient}",
-                            f"Qubits {self.pool.get_qubits(index)}"
-                            f" (divided by penalty: {penalty})" if penalty != 1 else "",
+                            f" (Qubits {self.pool.get_qubits(index)};"
+                            f" divided by penalty: {penalty})" if penalty != 1 else "",
                         ]
                     )
                 )
@@ -1332,7 +1359,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
                 self.file_name,
                 self.exact_energy,
                 self.n,
-                self.hamiltonian
+                self.hamiltonian,
+                self.lnn,
+                self.lnn_qiskit
             )
 
             self.indices = []
@@ -1378,10 +1407,11 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         if finished:
             return finished, viable_candidates, viable_gradients, total_norm, prep_norm
 
-        print(
-            f"Operators under consideration ({len(viable_gradients)}):\n{viable_candidates}"
-            f"\nCorresponding gradients (ordered by magnitude):\n{viable_gradients}"
-        )
+        if self.verbose:
+            print(
+                f"Operators under consideration ({len(viable_gradients)}):\n{viable_candidates}"
+                f"\nCorresponding gradients (ordered by magnitude):\n{viable_gradients}"
+            )
 
         self.iteration_nfevs = []  # Function evaluations by optimizer
         self.iteration_ngevs = []  # Gradient evaluations by optimizer
@@ -1421,6 +1451,28 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
         return energy, gradient, viable_candidates, viable_gradients
 
+    def get_iteration_swaps(self,qubits,qubit_order=None):
+        """
+        Gets the swap circuit that is necessary to bring the qubits in the input list together.
+        It is assumed that the current qubit ordering is given by self.qubit_order.
+
+        Arguments:
+            qubits (list): the list of qubits we want to bring together. These are not necessary represented by
+                physical qubits with the same index
+            qubit_order (list): current physical qubit ordering. If it is None, self.qubit_order will be used.
+        """
+
+        if qubit_order is None:
+            qubit_order = self.qubit_order
+
+        if not self.lnn:
+            n_swaps = 0
+            swap_net_circuit = QuantumCircuit(self.n)
+        else: 
+            n_swaps, swap_net_circuit, qubit_order = get_swaps(qubits, qubit_order,fermionic = "ferm" in self.pool.name)
+            
+        return n_swaps, swap_net_circuit, qubit_order
+
     def complete_iteration(self, energy, total_norm, prep_norm, sel_gradients):
         """
         Complete iteration by storing the relevant data and updating the state.
@@ -1436,17 +1488,14 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.energy = energy
 
         if self.lnn:
-            # Update current qubit order
-            logical_qubits = self.pool.get_qubits(self.indices[-1])
-            physical_qubits = [self.qubit_order.index(q) for q in logical_qubits]
-            physical_qubits2 = prepare_lnn_op(physical_qubits)
-            n_swaps = count_qe_lnn_swaps(physical_qubits, physical_qubits2)
-            self.qubit_order = swap_qe_lnn(self.qubit_order,physical_qubits,physical_qubits2)
+            # Get the qubits corresponding to orbitals which have their occupation numbers changed by this operator.
+            # Z strings don't matter because they'll be absorbed into the swap network.
+            iteration_qubits = self.pool.get_orb_qubits(self.indices[-1])
+            n_swaps, swap_net_circuit, self.qubit_order = self.get_iteration_swaps(iteration_qubits)
+            print("Updated qubit order: ",self.qubit_order)
         else:
             n_swaps = 0
-
-        if self.lnn:
-            print("Updated qubit order: ",self.qubit_order)
+            swap_net_circuit = None
 
         # Save iteration data
         self.data.process_iteration(
@@ -1461,8 +1510,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             self.iteration_nfevs,
             self.iteration_ngevs,
             self.iteration_nits,
-            self.qubit_order,
-            n_swaps
+            self.qubit_order.copy(),
+            n_swaps,
+            swap_net_circuit
         )
 
         # Update current state
@@ -1769,6 +1819,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             max_additions -= 1
 
         print(f"Operator(s) added to ansatz: {new_indices}")
+        print(f"Gradients: {gradients}")
         self.update_iteration_costs(total_new_nfevs, total_new_ngevs, total_new_nits)
 
         return energy, gradient
