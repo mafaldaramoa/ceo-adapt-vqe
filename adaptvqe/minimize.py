@@ -37,7 +37,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import warnings
-from numpy import (asarray, sqrt, Inf)
+from numpy import asarray, sqrt
+try:   
+    from numpy import Inf
+except:
+    # Todo: just use newer version (inf)
+    from numpy import inf as Inf
+
 import numpy as np
 
 try:

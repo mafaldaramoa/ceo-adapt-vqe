@@ -46,3 +46,4 @@ print("Final ansatz circuit:\n", qc)
 # Access the number of CNOTs and CNOT depth at each iteration
 print("Evolution of ansatz CNOT counts: ", data.acc_cnot_counts(pool))
 print("Evolution of ansatz CNOT depths: ", data.acc_cnot_depths(pool))
+
