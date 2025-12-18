@@ -13,6 +13,8 @@ from math import log2
 from scipy.sparse.linalg import expm_multiply
 from scipy.sparse import csc_matrix
 
+from openfermion import get_sparse_operator
+
 # Pauli operators (two-dimensional) as matrices
 pauliX = np.array([[0, 1],
                    [1, 0]],
@@ -219,6 +221,26 @@ def calculate_overlap(state1, state2):
     overlap = np.abs(np.dot(bra, ket))
 
     return overlap
+
+
+def get_state_energy(state,hamiltonian):
+    """
+    Gets the expectation value of a Hamiltonian in a state.
+
+    Arguments:
+        state (csc_matrix): the statevector we want to measure the energy in
+        hamiltonian (Union[InteractionOperator,QubitOperator,FermionOperator]): the Hamiltonian we want the expectation
+            value of
+
+    Returns:
+        energy (float): the energy in this circuit
+    """
+
+    bra = state.transpose().conj()
+    h_sparse = get_sparse_operator(hamiltonian)
+    energy = (bra.dot(h_sparse.dot(state)))[0, 0].real
+
+    return energy
 
 
 def state_energy(state, hamiltonian):

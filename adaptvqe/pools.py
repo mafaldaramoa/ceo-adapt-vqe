@@ -28,10 +28,10 @@ from scipy.sparse.linalg import expm, expm_multiply
 from scipy.sparse import issparse, identity
 
 from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_circuit, cnot_depth, cnot_count,
-                       paired_f_swap_network_orderings, prepare_lnn_op, count_qe_lnn_swaps)
+                       paired_f_swap_network_orderings, prepare_lnn_op, count_lnn_swaps, transpile_lnn, fe_circuit)
 from .chemistry import normalize_op
-from .op_conv import string_to_qop
-from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
+from .op_conv import string_to_qop, get_qasm
+from .utils import (create_excitations, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
 
 
 
@@ -47,7 +47,7 @@ class ImplementationType:
 
 class PoolOperator(metaclass=abc.ABCMeta):
 
-    def __init__(self, operator, n, tag, frozen_orbitals=[], cnots=None, cnot_depth=None, parents=None,
+    def __init__(self, operator, n, tag, frozen_orbitals=[], cnots=None, cnot_depth=None, lnn_cnots=None, parents=None,
                  source_orbs=None, target_orbs=None, ceo_type=None):
         """
         Arguments:
@@ -77,7 +77,9 @@ class PoolOperator(metaclass=abc.ABCMeta):
 
             self._q_operator = None
             self.op_type = OpType.FERMIONIC
-            assert parents is None
+            self.cnots = cnots
+            self.cnot_depth = cnot_depth
+            self.lnn_cnots = lnn_cnots
             self.parents = parents
 
         elif isinstance(operator, QubitOperator):
@@ -86,6 +88,7 @@ class PoolOperator(metaclass=abc.ABCMeta):
             self.op_type = OpType.QUBIT
             self.cnots = cnots
             self.cnot_depth = cnot_depth
+            self.lnn_cnots = lnn_cnots
             self.parents = parents
 
         else:
@@ -145,11 +148,35 @@ class PoolOperator(metaclass=abc.ABCMeta):
 
     def normalize(self):
         """
-        Normalize self, so that the sum of the absolute values of coefficients is one.
+        Normalize self, so that the sum of the absolute values of coefficients in the qubit operator is one.
         """
 
+        # Save old qubit operator, so we know the normalization factor
+        prev_op = self.q_operator
+
+        # Normalize qubit operator
+        self._q_operator = normalize_op(self.q_operator)
+
+        if self._f_operator is not None:
+
+            # Find the normalization factor
+            terms = prev_op.terms
+            sample_pauli = list(terms.keys())[0]
+            prev_coeff = terms[sample_pauli]
+            terms = self._q_operator.terms
+            new_coeff = terms[sample_pauli]
+            norm_factor = new_coeff / prev_coeff
+
+            # Normalize fermionic operator
+            self._f_operator = norm_factor * self._f_operator
+
+        """
         self._f_operator = normalize_op(self._f_operator)
-        self._q_operator = normalize_op(self._q_operator)
+        #self._q_operator = normalize_op(self._q_operator)
+        if self._f_operator is not None:
+            self._q_operator = jordan_wigner(self._f_operator)
+        else:
+            self._q_operator = normalize_op(self._q_operator)"""
 
     def create_qubit(self):
         """
@@ -157,7 +184,8 @@ class PoolOperator(metaclass=abc.ABCMeta):
         """
 
         if not self._q_operator:
-            self._q_operator = normalize_op(jordan_wigner(self._f_operator))
+            #self._q_operator = normalize_op(jordan_wigner(self._f_operator))
+            self._q_operator = jordan_wigner(self._f_operator)
 
     def create_sparse(self):
         """
@@ -187,7 +215,7 @@ class PoolOperator(metaclass=abc.ABCMeta):
 class OperatorPool(metaclass=abc.ABCMeta):
     name = None
 
-    def __init__(self, molecule=None, frozen_orbitals=[], n=None, source_ops=None):
+    def __init__(self, molecule=None, frozen_orbitals=[], n=None, source_ops=None, fermionic_swaps=False):
         """
         Arguments:
             molecule (PyscfMolecularData): the molecule for which we will use the pool
@@ -209,6 +237,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         self.frozen_orbitals = frozen_orbitals
         self.molecule = molecule
         self.source_ops = source_ops
+        self.fermionic_swaps = fermionic_swaps
 
         if molecule is None:
             assert n is not None
@@ -233,6 +262,9 @@ class OperatorPool(metaclass=abc.ABCMeta):
             self.parent_range = range(i, self.parent_pool.size)
         else:
             self.parent_range = []
+
+        if fermionic_swaps:
+            assert "CEO" in self.name or "QE" in self.name
 
     def __add__(self, other):
 
@@ -267,13 +299,15 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         return text
 
-    def add_operator(self, new_operator, cnots=None, cnot_depth=None, parents=None, source_orbs=None, target_orbs=None,
+    def add_operator(self, new_operator, cnots=None, cnot_depth=None, lnn_cnots=None, parents=None, source_orbs=None, target_orbs=None,
                      ceo_type=None, check_for_repeats=True):
         """
         Arguments:
             new_operator (Union[PoolOperator,FermionOperator,QubitOperator]): operator to add to pool
             cnots (int): number of CNOTs in the circuit implementation of this operator
             cnot_depth (int): CNOT depth in the circuit implementation of this operator
+            lnn_cnots (int): number of CNOTs in the circuit implementation of this operator, assuming LNN connectivity
+                in the qubits involved in the excitation
             parents (list): indices of operators that this one derives from (in the case of CEOs, where operator is a
                 linear combination of parents)
             source_orbs (list): spin-orbitals from which the operator removes fermions
@@ -289,6 +323,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
                                         self.frozen_orbitals,
                                         cnots,
                                         cnot_depth,
+                                        lnn_cnots,
                                         parents,
                                         source_orbs,
                                         target_orbs,
@@ -309,7 +344,12 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
     @property
     def imp_type(self):
-        return self._imp_type
+        try:
+            return self._imp_type
+        except:
+            raise AttributeError("PoolOperator does not have imp_operator attribute because an implementation type "
+                                 "hasn't been set for this pool. "
+                                 "Please choose an implementation by setting pool.imp_type.")
 
     @imp_type.setter
     def imp_type(self, imp_type):
@@ -392,6 +432,22 @@ class OperatorPool(metaclass=abc.ABCMeta):
         """
         return self.operators[index].qubits
 
+    def get_orb_qubits(self, index):
+        """
+        Returns list of qubits in which the operator specified by this index acts non trivially, excluding Z strings
+        """
+
+        # Get list of source and target orbitals
+        list_orbs = self.operators[index].source_orbs + self.operators[index].target_orbs
+
+        if isinstance(list_orbs[0],list):
+            # In the case of MVP-CEOs, source_orbs and target_orbs may be lists of lists. Flatten.
+            list_orbs = [item for sublist in list_orbs for item in sublist]
+
+        no_rep_list = list(set(list_orbs))
+
+        return no_rep_list
+
     def get_parents(self, index):
         """
         Applicable only to CEO operators.
@@ -471,7 +527,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
             coefficient (float)
             index (int)
         """
-        assert self.op_type == ImplementationType.SPARSE
+        assert self.imp_type == ImplementationType.SPARSE
 
         if self.eig_decomp[index] is None:
             return expm(coefficient * self.get_imp_op(index))
@@ -524,16 +580,44 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         return m
 
-    def get_cnots(self, index, qubit_order=None, lnn=False):
+    def get_unitary(self, coefficients, indices):
+        """
+        Calculates the unitary implemented by the ansatz defined by input coefficients and indices.
+
+        Arguments:
+            coefficients (list): ansatz coefficients
+            indices (list): ansatz indices
+
+        Returns:
+            unitary (csc_matrix): sparse matrix representing the ansatz
+        """
+
+        # Obtain ansatz unitary by exponentiation and multiplication
+        unitary = None
+        for i, c in zip(indices, coefficients):
+            # Multiply previous unitary by new operator
+            if unitary is None:
+                unitary = self.expm(c, i)
+            else:
+                unitary = self.expm_mult(c, i, unitary)
+
+        if not issparse(unitary):
+            unitary = csc_matrix(unitary)
+
+        return unitary
+
+    def get_cnots(self, index, qubit_order=None, transpile_swap=False, transpile_qiskit_lnn=False):
         """
         Obtain number of CNOTs required in the circuit implementation of the operator labeled by index.
         If index is a list, it must represent an MVP-CEO.
+        If transpile_swap, the
 
     Arguments:
         index (int): index of pool operator
         qubit_order (list): the mapping of physical qubits to logical qubits. qubit_order[i]=j means that physical qubit
             i represents logical qubit j.
-        lnn (bool): whether connectivity is restricted to LNN.
+        transpile_swap (bool): whether to transpile to LNN connectivity using (possibly fermionic) swap networks
+        transpile_qiskit_lnn (bool): whether to transpile to LNN connectivity using Qiskit's transpiler
         """
 
         if isinstance(index, list):
@@ -546,13 +630,26 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         cnots = self.operators[index].cnots
 
-        if qubit_order is not None:
-            logical_qubits = self.get_qubits(index)
-            physical_qubits = [qubit_order.index(q) for q in logical_qubits]
+        if transpile_swap:
+            cnots = self.operators[index].lnn_cnots
+            qubits = self.get_orb_qubits(index)
+            physical_qubits = [qubit_order.index(q) for q in qubits]
             physical_qubits2 = prepare_lnn_op(physical_qubits)
-            n_swaps = count_qe_lnn_swaps(physical_qubits, physical_qubits2)
-            n_routing_cnots = 3 * n_swaps
+            n_swaps = count_lnn_swaps(physical_qubits, physical_qubits2)
+            if self.fermionic_swaps:
+                # Fermionic swaps can be implemented with 2 CNOTs
+                n_routing_cnots = 2 * n_swaps
+            else:
+                # Regular swaps can be implemented with 3 CNOTs
+                n_routing_cnots = 3 * n_swaps
+
             cnots = cnots + n_routing_cnots
+
+        elif transpile_qiskit_lnn:
+
+            transpiled_op, _ = transpile_lnn(self.get_circuit([index],[1]),initial_layout=range(self.n))
+            qasm = get_qasm(transpiled_op)
+            cnots = cnot_count(qasm)
 
         return cnots
 
@@ -768,7 +865,10 @@ class GSD(OperatorPool):
             for q in range(p + 1, self.n):
 
                 if (p + q) % 2 == 0:
-                    self.add_operator(FermionOperator(((p, 1), (q, 0))), source_orbs=[q], target_orbs=[p])
+                    qc = get_qasm(fe_circuit([q],[p],1,self.n))
+                    cnots, depth = cnot_count(qc), cnot_depth(qc,self.n)
+                    self.add_operator(FermionOperator(((p, 1), (q, 0))), cnots=cnots, cnot_depth=depth,
+                                      source_orbs=[q], target_orbs=[p])
 
     def create_doubles(self):
         """
@@ -786,29 +886,26 @@ class GSD(OperatorPool):
                         if (p + q + r + s) % 2 != 0:
                             continue
 
-                        if (p + r) % 2 == 0:
-                            # pqrs is abab or baba, or aaaa or bbbb
-                            self.add_operator(FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0))),
-                                              source_orbs=[r, s], target_orbs=[p, q])
-                            self.add_operator(FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0))),
-                                              source_orbs=[p, s], target_orbs=[q, r])
+                        new_positions = []
 
-                        if (p + q) % 2 == 0:
-                            # aabb or bbaa, or aaaa or bbbb
-                            self.add_operator(FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0))),
-                                              source_orbs=[q, s], target_orbs=[p, r])
-                            self.add_operator(FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0))),
-                                              source_orbs=[p, s], target_orbs=[q, r])
+                        operators, orbs = create_excitations(p,q,r,s,fermionic=True,jw_transform=False)
 
-                        if (p + s) % 2 == 0:
-                            # abba or baab, or aaaa or bbbb
-                            self.add_operator(FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0))),
-                                              source_orbs=[r, s], target_orbs=[p, q])
-                            self.add_operator(FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0))),
-                                              source_orbs=[q, s], target_orbs=[p, r])
+                        for (operator_1, operator_2), (source_orbs, target_orbs) in zip(operators, orbs):
 
-                        # If aaaa or bbbb, all ifs apply, but there are only 3 distinct operators
-                        # In the other cases, only one of the ifs applies, 2 distinct operators
+                            qc = get_qasm(fe_circuit(source_orbs[0], target_orbs[0],1,self.n))
+                            cnots, depth = cnot_count(qc), cnot_depth(qc,self.n)
+                            pos1 = self.add_operator(operator_1, cnots=cnots, cnot_depth=depth,
+                                                     source_orbs=source_orbs[0], target_orbs=target_orbs[0])
+
+                            qc = get_qasm(fe_circuit(source_orbs[1], target_orbs[1],1,self.n))
+                            cnots, depth = cnot_count(qc), cnot_depth(qc,self.n)
+                            pos2 = self.add_operator(operator_2, cnots=cnots, cnot_depth=depth,
+                                                     source_orbs=source_orbs[1], target_orbs=target_orbs[1])
+
+                            new_positions += [pos1, pos2]
+
+                        new_positions = [pos for pos in new_positions if pos is not None]
+                        self._ops_on_qubits[str([p, q, r, s])] = new_positions
 
     @property
     def op_type(self):
@@ -863,20 +960,28 @@ class GSD(OperatorPool):
 
         return m
 
-    def get_circuit(self, indices, coefficients):
+    def get_circuit(self, indices, coefficients, staircase_method=False):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments, as a Qiskit QuantumCircuit.
         The function is specific for pools where the generators are sums of commuting Paulis, such as GSD or Pauli pools
         Arguments:
             indices (list)
             coefficients (list)
+            staircase_method (bool): whether to implement the operators using the ladder of CNOTs method, which
+                implements the exponential of each Pauli string individually. If False, the more efficient method of
+                https://doi.org/10.1103/PhysRevA.102.062612 is used.
         """
 
         circuit = QuantumCircuit(self.n)
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
-            qubit_operator = coefficient * self.operators[index].q_operator
-            qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
+            op = self.operators[index]
+            qubit_operator = coefficient * op.q_operator
+
+            if staircase_method:
+                qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
+            else:
+                qc = fe_circuit(op.source_orbs, op.target_orbs, coefficient, self.n, True)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
@@ -1797,6 +1902,7 @@ class QE(OperatorPool):
                  couple_exchanges=False,
                  frozen_orbitals=[],
                  n=None,
+                 fermionic_swaps=False,
                  source_ops=None):
         """
         Arguments:
@@ -1808,6 +1914,8 @@ class QE(OperatorPool):
                 virtual orbitals are not yet implemented.
             n (int): number of qubits the operator acts on. Note that this includes identity operators - it's dependent
             on system size, not operator support
+            fermionic_swaps (bool): if to include the JW anticommutation string. A fermionic version of CEOs is possible if
+                we use fermionic swaps to bring qubit together when compiling the circuit.
             source_ops (list): the operators to generate the pool from, if tiling.
         """
 
@@ -1816,7 +1924,10 @@ class QE(OperatorPool):
         if couple_exchanges:
             self.name = "MVP_CEO"
 
-        super().__init__(molecule, frozen_orbitals, n=n, source_ops=source_ops)
+        if fermionic_swaps:
+            self.name += "_ferm"
+
+        super().__init__(molecule, frozen_orbitals, n=n, source_ops=source_ops, fermionic_swaps=fermionic_swaps)
 
     def create_operators(self):
         """
@@ -1836,12 +1947,14 @@ class QE(OperatorPool):
             for q in range(p + 1, self.n):
 
                 if (p + q) % 2 == 0:
-                    f_operator = FermionOperator(((p, 1), (q, 0)))
-                    f_operator -= hermitian_conjugated(f_operator)
-                    f_operator = normal_ordered(f_operator)
+                    operator = FermionOperator(((p, 1), (q, 0)))
+                    operator -= hermitian_conjugated(operator)
+                    operator = normal_ordered(operator)
 
-                    q_operator = remove_z_string(f_operator)
-                    pos = self.add_operator(q_operator, cnots=2, cnot_depth=2,
+                    if not self.fermionic_swaps:
+                        operator = remove_z_string(operator)
+
+                    pos = self.add_operator(operator, cnots=2, cnot_depth=2, lnn_cnots=2,
                                             source_orbs=[q], target_orbs=[p])
                     self._ops_on_qubits[str([p, q])] = [pos]
 
@@ -1863,14 +1976,14 @@ class QE(OperatorPool):
 
                         new_positions = []
 
-                        q_operators, orbs = create_qes(p,q,r,s)
+                        operators, orbs = create_excitations(p,q,r,s,fermionic=self.fermionic_swaps)
 
-                        for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
+                        for (operator_1, operator_2), (source_orbs, target_orbs) in zip(operators, orbs):
 
-                            pos1 = self.add_operator(q_operator_1, cnots=13, cnot_depth=11,
+                            pos1 = self.add_operator(operator_1, cnots=13, cnot_depth=11, lnn_cnots=27,
                                                      source_orbs=source_orbs[0], target_orbs=target_orbs[0])
 
-                            pos2 = self.add_operator(q_operator_2, cnots=13, cnot_depth=11,
+                            pos2 = self.add_operator(operator_2, cnots=13, cnot_depth=11, lnn_cnots=27,
                                                      source_orbs=source_orbs[1], target_orbs=target_orbs[1])
 
                             new_positions += [pos1, pos2]
@@ -2004,7 +2117,7 @@ class QE_All(QE):
                             operator = f_operator - hermitian_conjugated(f_operator)
                             operator = normal_ordered(operator)
                             operator = remove_z_string(operator)
-                            pos = self.add_operator(operator, cnots=13, cnot_depth=11,
+                            pos = self.add_operator(operator, cnots=13, cnot_depth=11, lnn_cnots=27,
                                                     source_orbs=source_orbs_list[i], target_orbs=target_orbs_list[i])
                             new_positions.append(pos)
 
@@ -2039,6 +2152,7 @@ class CEO(OperatorPool):
                  diff=True,
                  dvg=False,
                  dve=False,
+                 fermionic_swaps=False,
                  n=None,
                  source_ops=None):
         """
@@ -2048,6 +2162,8 @@ class CEO(OperatorPool):
             diff (bool):  If to consider OVP-CEOs which are differences of QEs.
             dvg (bool): if to consider DVG-CEOs.
             dve (bool): if to consider DVE-CEOs.
+            fermionic_swaps (bool): if to include the JW anticommutation string. A fermionic version of CEOs is possible if
+                we use fermionic swaps to bring qubit together when compiling the circuit.
             n (int): number of qubits the operator acts on. Note that this includes identity operators - it's dependent
             on system size, not operator support
         """
@@ -2068,10 +2184,16 @@ class CEO(OperatorPool):
         # parameters and turn them into MVP-CEOs with independent excitations.
         track_parents = dvg or dve
         if track_parents:
-            self.parent_pool = QE(molecule, n=n)
-        self.track_parents = track_parents
+            if fermionic_swaps:
+                self.parent_pool = GSD(molecule,n=n)
+            else:
+                self.parent_pool = QE(molecule, n=n)
 
-        super().__init__(molecule, n=n, source_ops=source_ops)
+        self.track_parents = track_parents
+        if fermionic_swaps:
+            self.name += "_ferm"
+
+        super().__init__(molecule, n=n, source_ops=source_ops, fermionic_swaps=fermionic_swaps)
 
         if not diff:
             self.name += "_sum"
@@ -2088,6 +2210,15 @@ class CEO(OperatorPool):
             #yield any linear combination of operators, because there is at most one single per pair of
             #spin-orbitals. Singles belong to the pool independently and individually.
             self.operators = copy(self.parent_pool.operators)
+
+            # CNOTs to implement LNN qubit excitation operator on 2/4 qubits (in addition to swap gates)
+            for i in range(self.size):
+                if len(self.get_qubits(i)) == 2:
+                    #self.operators[i].cnots = 2
+                    self.operators[i].lnn_cnots = 2
+                else:
+                    #self.operators[i].cnots = 13
+                    self.operators[i].lnn_cnots = 41
         else:
             self.create_singles()
 
@@ -2103,13 +2234,14 @@ class CEO(OperatorPool):
             for q in range(p + 1, self.n):
 
                 if (p + q) % 2 == 0:
-                    f_operator = FermionOperator(((p, 1), (q, 0)))
-                    f_operator -= hermitian_conjugated(f_operator)
-                    f_operator = normal_ordered(f_operator)
+                    operator = FermionOperator(((p, 1), (q, 0)))
+                    operator -= hermitian_conjugated(operator)
+                    operator = normal_ordered(operator)
 
-                    q_operator = remove_z_string(f_operator)
+                    if not self.fermionic_swaps:
+                        operator = remove_z_string(operator)
 
-                    self.add_operator(q_operator, cnots=2, cnot_depth=2, source_orbs=[q],
+                    self.add_operator(operator, cnots=2, cnot_depth=2, source_orbs=[q],
                                       target_orbs=[p])
 
     def create_doubles(self):
@@ -2133,23 +2265,44 @@ class CEO(OperatorPool):
                         else:
                             parents = None
 
-                        q_operators, orbs = create_qes(p,q,r,s)
+                        q_operators, orbs = create_excitations(p,q,r,s, fermionic=self.fermionic_swaps)
 
                         for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators,orbs):
 
                             if self.sum:
-                                self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=source_orbs, target_orbs=target_orbs,
+                                self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                                  parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
                                                   ceo_type="sum")
                             if self.diff:
-                                self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
-                                                  source_orbs=source_orbs, target_orbs=target_orbs,
+                                self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                                  parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
                                                   ceo_type="diff")
 
 
     @property
     def op_type(self):
         return OpType.QUBIT
+
+    def find_dual_op(self,i):
+        """
+        Given the index of an OVP-CEO, finds the OVP-CEO acting on the same qubits with the opposite type (sum/diff).
+        """
+
+        if self.get_qubits(i + 1) == self.get_qubits(i):
+            dual_i = i + 1
+        elif self.get_qubits(i - 1) == self.get_qubits(i):
+            dual_i = i - 1
+        else:
+            raise ValueError
+
+        if self.operators[i].ceo_type == "sum":
+            assert self.operators[dual_i].ceo_type == "diff"
+        elif self.operators[i].ceo_type == "diff":
+            assert self.operators[dual_i].ceo_type == "sum"
+        else:
+            raise ValueError
+
+        return dual_i
 
     def expm(self, coefficient, index):
         """
@@ -2200,6 +2353,10 @@ class CEO(OperatorPool):
     def get_circuit(self, indices, coefficients):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
+        
+        Arguments:
+            indices (list): indices defining the operator
+            coefficients (list): corresponding coefficients
         """
 
         if self.track_parents:
@@ -2274,6 +2431,9 @@ class CEO(OperatorPool):
                     q_op = QubitOperator()
                     for ix, c in zip(acc_indices, acc_cs):
                         q_op = q_op + c * self.operators[ix].q_operator
+                    if self.fermionic_swaps:
+                    # Fermionic modes have been brought together using fermionic swaps, so we can remove the JW Z string
+                        q_op = remove_z_string(q_op)
                     qc = mvp_ceo_circuit(q_op, self.n, big_endian=True)
                     acc_indices = []
                     acc_cs = []
@@ -2296,12 +2456,14 @@ class OVP_CEO(CEO):
                  molecule=None,
                  sum=True,
                  diff=True,
+                 fermionic_swaps=False,
                  n=None):
         super().__init__(molecule=molecule,
                          sum=sum,
                          diff=diff,
                          dvg=False,
                          dve=False,
+                         fermionic_swaps=fermionic_swaps,
                          n=n)
 
 
@@ -2320,12 +2482,14 @@ class DVG_CEO(CEO):
                  molecule=None,
                  sum=True,
                  diff=True,
+                 fermionic_swaps=False,
                  n=None):
         super().__init__(molecule=molecule,
                          sum=sum,
                          diff=diff,
                          dvg=True,
                          dve=False,
+                         fermionic_swaps=fermionic_swaps,
                          n=n)
 
 
@@ -2344,12 +2508,14 @@ class DVE_CEO(CEO):
                  molecule=None,
                  sum=True,
                  diff=True,
+                 fermionic_swaps=False,
                  n=None):
         super().__init__(molecule=molecule,
                          sum=sum,
                          diff=diff,
                          dvg=False,
                          dve=True,
+                         fermionic_swaps=fermionic_swaps,
                          n=n)
 
 
@@ -2365,11 +2531,13 @@ class MVP_CEO(QE):
     def __init__(self,
                  molecule=None,
                  frozen_orbitals=[],
+                 fermionic_swaps=False,
                  n=None,
                  source_ops=None):
         super().__init__(molecule=molecule,
                          couple_exchanges=True,
                          frozen_orbitals=frozen_orbitals,
+                         fermionic_swaps=fermionic_swaps,
                          n=n,
                          source_ops=source_ops)
 
@@ -2407,6 +2575,10 @@ class MVP_CEO(QE):
                 q_op = QubitOperator()
                 for ix, c in zip(acc_indices, acc_cs):
                     q_op = q_op + c * self.operators[ix].q_operator
+
+                if self.fermionic_swaps:
+                    # Fermionic modes have been brought together using fermionic swaps, so we can remove the JW Z string
+                    q_op = remove_z_string(q_op)
                 qc = mvp_ceo_circuit(q_op, self.n, big_endian=True)
                 acc_indices = []
                 acc_cs = []
@@ -2524,9 +2696,8 @@ class TiledCEO(CEO):
                     offset_list = [offset + qubits[0] for offset in offset_list]
                 if offset_list == qubits:
                     keep = True
-                print("HERE",qubits,keep)
                 if keep:
-                    pos = self.add_operator(op.operator, cnots=13, cnot_depth=11,
+                    pos = self.add_operator(op.operator, cnots=13, cnot_depth=11, lnn_cnots=41,
                                             source_orbs=op.source_orbs, target_orbs=op.target_orbs)
                     if old_qubits != qubits:
                         self._ops_on_qubits[str(qubits)] = [pos]
@@ -2581,7 +2752,7 @@ class TiledCEO(CEO):
             for p in range(0, self.n-offset_list[-1]):
                 q, r, s = [p + offset for offset in offset_list[1:]]
 
-                q_operators, orbs = create_qes(p,q,r,s)
+                q_operators, orbs = create_excitations(p,q,r,s)
 
                 for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
 

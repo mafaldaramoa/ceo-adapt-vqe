@@ -5,6 +5,8 @@ Created on Tue Aug  2 09:23:22 2022
 
 @author: mafal
 """
+import numpy as np
+
 from openfermion import MolecularData
 from openfermionpyscf import run_pyscf
 
@@ -120,6 +122,57 @@ def create_h7(r):
 
     return h7
 
+
+def create_h8(r):
+    """
+    Arguments:
+        r (float): interatomic distance (angstrom)
+    Returns:
+        h8 (PyscfMolecularData): the linear H8 molecule at interatomic distance r, in the minimal STO-3G basis set
+    """
+
+    geometry = [('H', (0, 0, 0)), ('H', (0, 0, r)), ('H', (0, 0, 2 * r)), ('H', (0, 0, 3 * r)),
+                ('H', (0, 0, 4 * r)), ('H', (0, 0, 5 * r)), ('H', (0, 0, 6 * r)),('H', (0, 0, 7*r))]
+    basis = 'sto-3g'
+    multiplicity = 1
+    charge = 0
+    h8 = MolecularData(geometry, basis, multiplicity, charge, description='H8')
+    h8 = run_pyscf(h8, run_fci=True, run_ccsd=False)
+
+    return h8
+
+
+def create_triangular_h6(r):
+    """
+    Arguments:
+        r (float): interatomic distance (angstrom)
+    Returns:
+        h6 (PyscfMolecularData): the triangular H6 molecule in the minimal
+            STO-3G basis set. All atoms are separated by r. Within a equilateral
+            triangle, we have 3 atoms in the vertices and 3 atoms in the center
+            of each edge.
+    """
+    # The equilateral triangle can be divided into 4 smaller equilateral
+    #triangles with side r. The height of these triangles is h and can be
+    #calculating using Pythagoras theorem. This is also the y distance between
+    #atoms with different y coordinates, assuming the basis of the triangular
+    #is perpendicular to the y axis.
+    h = r*np.sqrt(3)/2
+
+    geometry = [('H', (0, 0, 0)),
+                ('H', (-r/2, -h, 0)),
+                ('H', (r/2, -h, 0)),
+                ('H', (-r, -2*h, 0)),
+                ('H', (0, -2*h, 0)),
+                ('H', (r, -2*h, 0))]
+
+    basis = 'sto-3g'
+    multiplicity = 1
+    charge = 0
+    h6 = MolecularData(geometry, basis, multiplicity, charge, description='H6_trg')
+    h6 = run_pyscf(h6, run_fci=True, run_ccsd=True)
+
+    return h6
 
 def create_lih(r):
     """

@@ -7,13 +7,17 @@ Created on Thu Jul 28 14:31:26 2022
 """
 import numpy as np
 import pickle
+from pyscf import ao2mo
+from pyscf.tools.fcidump import read
 
 from openfermion import (jordan_wigner,
                          FermionOperator,
                          QubitOperator,
+                         InteractionOperator,
                          hermitian_conjugated,
                          normal_ordered,
                          count_qubits)
+from openfermion.chem.molecular_data import spinorb_from_spatial
 
 from .op_conv import convert_hamiltonian, string_to_qop
 
@@ -267,7 +271,7 @@ def tile2(q_op, n, new_n):
     return tiled_ops
 
 
-def create_qes(p, q, r, s):
+def create_excitations(p, q, r, s, fermionic = False, jw_transform = False):
     """
     Creates all unique qubit excitations acting on the set of spin-orbitals p,q,r,s.
 
@@ -279,9 +283,11 @@ def create_qes(p, q, r, s):
 
     Arguments:
         p, q, r, s (int): the spin-orbital indices
+        fermionic (bool): whether to keep the Jordan-Wigner anticommutation Z string
+        jw_transform (bool): whether to apply JW transformation in case fermionic = True
 
     Returns:
-        q_operators (list): list of lists containing pairs of qubit excitations. If p,q,r,s are aaaa or bbbb, the list
+        operators (list): list of lists containing pairs of qubit excitations. If p,q,r,s are aaaa or bbbb, the list
             contains three pairs of qubit excitations. Otherwise it contains one.
         orbs (list): list of lists containing pairs of source/target orbitals. Length: same as described above.
             The source (target) orbitals for q_operators[0] are returned in orbs[0][0] (orbs[1][0]).
@@ -289,76 +295,85 @@ def create_qes(p, q, r, s):
     """
 
 
-    q_operators = []
+    operators = []
     orbs = []
+
     if (p + r) % 2 == 0:
         # pqrs is abab or baba, or aaaa or bbbb
 
-        f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-        # f_operator_2 = FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0)))
-        f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
+        operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
+        operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
 
-        f_operator_1 -= hermitian_conjugated(f_operator_1)
-        f_operator_2 -= hermitian_conjugated(f_operator_2)
+        operator_1 -= hermitian_conjugated(operator_1)
+        operator_2 -= hermitian_conjugated(operator_2)
 
-        f_operator_1 = normal_ordered(f_operator_1)
-        f_operator_2 = normal_ordered(f_operator_2)
+        operator_1 = normal_ordered(operator_1)
+        operator_2 = normal_ordered(operator_2)
 
-        q_operator_1 = remove_z_string(f_operator_1)
-        q_operator_2 = remove_z_string(f_operator_2)
+        if not fermionic:
+            operator_1 = remove_z_string(operator_1)
+            operator_2 = remove_z_string(operator_2)
+        elif jw_transform:
+            operator_1 = jordan_wigner(operator_1)
+            operator_2 = jordan_wigner(operator_2)
 
         source_orbs = [[r, s], [p, s]]
         target_orbs = [[p, q], [q, r]]
 
-        q_operators.append([q_operator_1, q_operator_2])
+        operators.append([operator_1, operator_2])
         orbs.append([source_orbs, target_orbs])
 
     if (p + q) % 2 == 0:
         # aabb or bbaa, or aaaa or bbbb
 
-        # f_operator_1 = FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0)))
-        f_operator_1 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
-        # f_operator_2 = FermionOperator(((p, 0), (q, 1), (r, 1), (s, 0)))
-        f_operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
+        operator_1 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
+        operator_2 = FermionOperator(((q, 1), (r, 1), (p, 0), (s, 0)))
 
-        f_operator_1 -= hermitian_conjugated(f_operator_1)
-        f_operator_2 -= hermitian_conjugated(f_operator_2)
+        operator_1 -= hermitian_conjugated(operator_1)
+        operator_2 -= hermitian_conjugated(operator_2)
 
-        f_operator_1 = normal_ordered(f_operator_1)
-        f_operator_2 = normal_ordered(f_operator_2)
+        operator_1 = normal_ordered(operator_1)
+        operator_2 = normal_ordered(operator_2)
 
-        q_operator_1 = remove_z_string(f_operator_1)
-        q_operator_2 = remove_z_string(f_operator_2)
+        if not fermionic:
+            operator_1 = remove_z_string(operator_1)
+            operator_2 = remove_z_string(operator_2)
+        elif jw_transform:
+            operator_1 = jordan_wigner(operator_1)
+            operator_2 = jordan_wigner(operator_2)
 
         source_orbs = [[q, s], [p, s]]
         target_orbs = [[p, r], [q, r]]
 
-        q_operators.append([q_operator_1, q_operator_2])
+        operators.append([operator_1, operator_2])
         orbs.append([source_orbs, target_orbs])
 
     if (p + s) % 2 == 0:
         # abba or baab, or aaaa or bbbb
 
-        f_operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
-        # f_operator_2 = FermionOperator(((p, 1), (q, 0), (r, 1), (s, 0)))
-        f_operator_2 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
+        operator_1 = FermionOperator(((p, 1), (q, 1), (r, 0), (s, 0)))
+        operator_2 = FermionOperator(((p, 1), (r, 1), (q, 0), (s, 0)))
 
-        f_operator_1 -= hermitian_conjugated(f_operator_1)
-        f_operator_2 -= hermitian_conjugated(f_operator_2)
+        operator_1 -= hermitian_conjugated(operator_1)
+        operator_2 -= hermitian_conjugated(operator_2)
 
-        f_operator_1 = normal_ordered(f_operator_1)
-        f_operator_2 = normal_ordered(f_operator_2)
+        operator_1 = normal_ordered(operator_1)
+        operator_2 = normal_ordered(operator_2)
 
-        q_operator_1 = remove_z_string(f_operator_1)
-        q_operator_2 = remove_z_string(f_operator_2)
+        if not fermionic:
+            operator_1 = remove_z_string(operator_1)
+            operator_2 = remove_z_string(operator_2)
+        elif jw_transform:
+            operator_1 = jordan_wigner(operator_1)
+            operator_2 = jordan_wigner(operator_2)
 
         source_orbs = [[r, s], [q, s]]
         target_orbs = [[p, q], [p, r]]
 
-        q_operators.append([q_operator_1, q_operator_2])
+        operators.append([operator_1, operator_2])
         orbs.append([source_orbs, target_orbs])
 
-    return q_operators, orbs
+    return operators, orbs
 
 
 def swap(l,i,j):
@@ -374,6 +389,8 @@ def swap(l,i,j):
         l (list): the modified list. This is not a copy.
     """
     temp = l[i]
+    if j >= len(l) or i >= len(l):
+        print("H")
     l[i] = l[j]
     l[j] = temp
     return l
@@ -469,3 +486,68 @@ def appears_in(list1,list2):
             return True
 
     return False
+
+
+def hamiltonian_from_fcidump(path):
+    """
+    Gets the Openfermion Hamiltonian from an FCIDUMP file
+    """
+
+    data = read(path,verbose=False)
+
+    ecore = data['ECORE']
+    nelec = data['NELEC']
+    norb = data['NORB']
+    h1 = data['H1']
+
+    # Rebuild 4-index tensor from flattened H2
+    h2_packed = data["H2"]
+    h2 = ao2mo.restore(1, h2_packed, norb)  # (norb,norb,norb,norb)
+
+    """
+    # openfermion seems to expect the integrals reordered as p^ r^ s q
+    # whereas pyscf stores them as (p,q,r,s)
+    h2_temp = np.zeros((4, 4, 4, 4))
+    for p in range(norb):
+        for q in range(norb):
+            for r in range(norb):
+                for s in range(norb):
+                    h2_temp[p, r, s, q] = h2[p, q, r, s]
+
+    h1_new, h2_new = get_tensors_from_integrals(h1, h2_temp)
+    """
+
+    # Shorter code:
+    h2 = 0.5 * np.asarray(h2.transpose(0, 2, 3, 1), order="C")
+    h1_new, h2_new = spinorb_from_spatial(h1, h2)
+
+    h = InteractionOperator(ecore, h1_new, h2_new)
+
+    return h, norb*2, nelec
+
+
+
+def hamiltonian_from_npz(path):
+    """
+    Gets the Openfermion Hamiltonian from an NPZ file
+    """
+    data = np.load(path)
+
+    # Get core energy and one-/two-body tensors
+    ecore = data['ECORE']
+    h1 = np.array(data['H1'])
+    h2 = np.array(data['H2'])
+    norb = data["NORB"]
+    nelec = data["NELEC"]
+
+    # Get number of alpha and beta electrons
+    n_a = int(nelec/2)
+    n_b = int(nelec/2)
+
+    h2 = 0.5 * np.asarray(h2.transpose(0, 2, 3, 1), order="C")
+    h1_new, h2_new = spinorb_from_spatial(h1, h2)
+
+    # Get the Hamiltonian and transform it to FermionOperator
+    h = InteractionOperator(ecore.item(), h1_new, h2_new)
+
+    return h, norb*2, nelec
