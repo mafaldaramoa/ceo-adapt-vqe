@@ -6,12 +6,13 @@ Created on Wed Jul  6 09:47:40 2022
 """
 
 from adaptvqe.molecules import create_h2
-from adaptvqe.pools import DVE_CEO
+from adaptvqe.pools import DVE_CEO, FullPauliPool
 from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt
 
 r = 1.5
 molecule = create_h2(r)
 pool = DVE_CEO(molecule)
+# pool = FullPauliPool(molecule)
 
 my_adapt = TensorNetAdapt(
     pool=pool,
@@ -46,3 +47,9 @@ print("Final ansatz circuit:\n", qc)
 # Access the number of CNOTs and CNOT depth at each iteration
 print("Evolution of ansatz CNOT counts: ", data.acc_cnot_counts(pool))
 print("Evolution of ansatz CNOT depths: ", data.acc_cnot_depths(pool))
+
+print("Final coefficients and indices:")
+print(my_adapt.coefficients)
+print(my_adapt.indices)
+print("Final state/initial state fidelity:")
+print(abs(my_adapt.tn_ref_state @ my_adapt.state) ** 2)
