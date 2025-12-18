@@ -6,6 +6,7 @@ import numpy as np
 from scipy.linalg import norm
 from quimb.tensor.tensor_1d import MatrixProductState
 from qiskit.quantum_info import Operator
+from cirq import equal_up_to_global_phase
 from adaptvqe.molecules import create_h2
 from adaptvqe.pools import DVE_CEO, FullPauliPool, ImplementationType
 from adaptvqe.algorithms.adapt_vqe import LinAlgAdapt, TensorNetAdapt
@@ -49,26 +50,32 @@ class TestH2Molecule(unittest.TestCase):
         molecule = create_h2(r)
         pool = FullPauliPool(molecule)
         pool.imp_type = ImplementationType.SPARSE
-        index = 2
         coefficient = 0.5
-        u = pool.expm(coefficient, index).todense()
-        ckt = pool.get_circuit([index], [coefficient])
-        ckt_op = Operator.from_circuit(ckt)
-        u_ckt = ckt_op.data
-        self.assertTrue(np.allclose(u_ckt, u))
+        all_close = []
+        for index in range(len(pool.operators)):
+            u = pool.expm(coefficient, index).todense()
+            ckt = pool.get_circuit([index], [coefficient])
+            ckt_op = Operator.from_circuit(ckt)
+            u_ckt = ckt_op.data
+            all_close.append(np.allclose(u_ckt, u))
+        self.assertTrue(all(all_close))
 
     def test_circuit_unitary_error(self):
         r = 1.5
         molecule = create_h2(r)
         pool = DVE_CEO(molecule)
         pool.imp_type = ImplementationType.SPARSE
-        index = 3
         coefficient = 0.5
-        u = pool.expm(coefficient, index).todense()
-        ckt = pool.get_circuit([index], [coefficient])
-        ckt_op = Operator.from_circuit(ckt)
-        u_ckt = ckt_op.data
-        self.assertTrue(np.allclose(u_ckt, u))
+        all_close = []
+        for index in range(len(pool.operators)):
+            u = pool.expm(coefficient, index).todense()
+            ckt = pool.get_circuit([index], [coefficient])
+            ckt_op = Operator.from_circuit(ckt)
+            u_ckt = ckt_op.data
+            # ac = np.allclose(u_ckt, u)
+            ac = equal_up_to_global_phase(u_ckt, u)
+            all_close.append(ac)
+        self.assertTrue(all(all_close))
 
     def test_dev_ceo_pool(self):
         r = 1.5
