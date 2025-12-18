@@ -3876,12 +3876,6 @@ class TensorNetAdapt(AdaptVQE):
         if bra:
             state = state.H
 
-        # For debug
-        print("In compute_state.")
-        fidelity = abs(state.H @ ref_state) ** 2
-        print("coefficients=", coefficients)
-        print(f"Fidelity of generated state: {fidelity:4.5e}")
-
         return state
 
     def create_orb_rotation_generator(self, orb_params):
