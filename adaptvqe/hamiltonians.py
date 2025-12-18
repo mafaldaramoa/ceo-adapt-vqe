@@ -1,3 +1,4 @@
+from warnings import warn
 import numpy as np
 from scipy.sparse import csc_matrix
 
@@ -6,8 +7,10 @@ try:
     from quspin.basis import spin_basis_1d
 except:
     pass
-    # Quspin not installed. Will try to use precalculated Hamiltonian ground energies if necessary.
-    # Todo: fix, it's ugly
+
+from quimb.tensor import DMRG
+from adaptvqe.tensor_helpers import qubop_to_mpo
+import openfermion as of
 
 from openfermion import (
     QubitOperator,
@@ -20,6 +23,7 @@ from openfermion.utils import count_qubits
 
 from .matrix_tools import ket_to_vector
 from .chemistry import get_hf_det
+from .tensor_helpers import computational_basis_mps
 
 class HubbardHamiltonian:
     """
@@ -104,7 +108,9 @@ class XXZHamiltonian:
     See https://doi.org/10.48550/arXiv.2206.14215.
     """
 
-    def __init__(self, j_xy, j_z, l):
+    def __init__(self, j_xy, j_z, l, store_ref_vector: bool=True, diag_mode: str="quspin", **kwargs):
+
+        assert diag_mode in ["quspin", "quimb"]
 
         self.description = f"XXZ_{j_xy}_{j_z}"
 
@@ -121,24 +127,52 @@ class XXZHamiltonian:
         # Try to load precomputed ground energy
         self.ground_energy = self.load_ground_energy(l, j_z, j_xy)
 
-        if self.ground_energy is None:
-            # Define Hamiltonian in Quspin
-            hz = 0  # z external field
-            basis = spin_basis_1d(l, pauli=True)
-            j_zz = [[j_z, i, i + 1] for i in range(l - 1)]  # OBC
-            j_xy = [[j_xy / 2.0, i, i + 1] for i in range(l - 1)]  # OBC
-            static = [["+-", j_xy], ["-+", j_xy], ["zz", j_zz]]
-            dynamic = []
-            h_xxz = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
-            emin, emax = h_xxz.eigsh(
-                k=2, which="BE", maxiter=1e4, return_eigenvectors=False
-            )
-            self.ground_energy = emin
+        if self.ground_energy is None: 
+            print("No pre-computed energy for given parameters.")
+            if diag_mode == "quspin":
+                print("Solving by ED with quspin.")
+                # Define Hamiltonian in Quspin
+                hz = 0  # z external field
+                basis = spin_basis_1d(l, pauli=True)
+                j_zz = [[j_z, i, i + 1] for i in range(l - 1)]  # OBC
+                j_xy = [[j_xy / 2.0, i, i + 1] for i in range(l - 1)]  # OBC
+                static = [["+-", j_xy], ["-+", j_xy], ["zz", j_zz]]
+                dynamic = []
+                h_xxz = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
+                emin, emax = h_xxz.eigsh(
+                    k=2, which="BE", maxiter=1e4, return_eigenvectors=False
+                )
+                self.ground_energy = emin
+            elif diag_mode == "quimb":
+                print("Solving by DMRG with quimb.")
+                if "max_mps_bond" in kwargs.keys():
+                    max_mps_bond = kwargs["max_mps_bond"]
+                else:
+                    max_mps_bond = 100
+                if "max_mpo_bond" in kwargs.keys():
+                    max_mpo_bond = kwargs["max_mpo_bond"]
+                else:
+                    max_mpo_bond = 300
+                ham_cirq = of.transforms.qubit_operator_to_pauli_sum(h)
+                qs = cirq.LineQubit.range(self.n)
+                # ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
+                ham_mpo = qubop_to_mpo(h, max_mpo_bond)
+                dmrg = DMRG(ham_mpo, bond_dims=max_mps_bond)
+                converged = dmrg.solve()
+                if not converged:
+                    print("DMRG did not converge!")
+                self.ground_energy = dmrg.energy
+            else:
+                raise ValueError(f"Got a bad diagonalization mode {diag_mode}. Pass 'quspin' or 'quimb'.")
 
         neel_state_cb = [i % 2 for i in range(l)]
-        neel_state = ket_to_vector(neel_state_cb)
-        neel_state = csc_matrix(neel_state).transpose()
-        self.ref_state = neel_state
+        if store_ref_vector:
+            neel_state = ket_to_vector(neel_state_cb)
+            neel_state = csc_matrix(neel_state).transpose()
+            self.ref_state = neel_state
+        else:
+            self.ref_state = None
+        self.tn_ref_state = computational_basis_mps(neel_state_cb)
         self.ref_det = neel_state_cb
 
     def diagonalize_np(self):
@@ -300,6 +334,7 @@ class FermionicHamiltonian:
         self.ref_det = get_hf_det(n_electrons, self.n)
         ref_state = ket_to_vector(self.ref_det)
         self.ref_state = csc_matrix(ref_state).transpose()
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
 
     @property
     def ground_state(self):

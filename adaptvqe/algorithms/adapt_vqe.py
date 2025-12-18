@@ -5,6 +5,8 @@ Created on Wed Jun 29 10:00:03 2022
 @author: mafal
 """
 
+from warnings import warn
+
 from copy import copy, deepcopy
 import abc
 import numpy as np
@@ -13,8 +15,11 @@ import scipy
 from scipy.sparse import csc_matrix, issparse
 from scipy.sparse.linalg import expm, expm_multiply
 
+import openfermion as of
 from openfermion import get_sparse_operator, count_qubits
 from openfermion.transforms import get_fermion_operator, freeze_orbitals
+
+from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
 
 from .adapt_data import AdaptData
 from ..chemistry import chemical_accuracy, get_hf_det, create_spin_adapted_one_body_op
@@ -23,6 +28,7 @@ from ..matrix_tools import ket_to_vector
 from ..minimize import minimize_bfgs
 from ..pools import ImplementationType
 from ..utils import bfgs_update
+from ..tensor_helpers import computational_basis_mps, qubop_to_mpo
 
 class AdaptVQE(metaclass=abc.ABCMeta):
     """
@@ -53,7 +59,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         frozen_orbitals=[],
         shots=None,
         track_prep_g=False,
-        previous_data=None
+        previous_data=None,
+        max_mpo_bond=None,
+        max_mps_bond=None
     ):
         """
         Arguments:
@@ -122,6 +130,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.rand_degenerate = rand_degenerate
         self.frozen_orbitals = frozen_orbitals
         self.track_prep_g = track_prep_g
+        self.max_mpo_bond = max_mpo_bond
+        self.max_mps_bond = max_mps_bond
 
         # Attributes describing type of CEO pool, when applicable. The algorithm runs differently for each of them
         self.dvg = "DVG" in self.pool.name
@@ -280,6 +290,8 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             ket_to_vector(self.ref_det), dtype=complex
         ).transpose()
 
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
+
         hamiltonian = self.molecule.get_molecular_hamiltonian()
 
         if self.frozen_orbitals:
@@ -302,6 +314,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
         self.ref_det = self.data.ref_det
         self.sparse_ref_state = self.data.sparse_ref_state
+        self.tn_ref_state = computational_basis_mps(self.ref_det)
 
         hamiltonian = self.data.hamiltonian
 
@@ -324,6 +337,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         self.file_name = f"{self.custom_hamiltonian.description}_{self.n}"
         self.sparse_ref_state = self.custom_hamiltonian.ref_state
         self.ref_det = self.custom_hamiltonian.ref_state
+        self.tn_ref_state = self.custom_hamiltonian.tn_ref_state
         hamiltonian = self.custom_hamiltonian.operator
         self.exact_energy = self.custom_hamiltonian.ground_energy
 
@@ -2540,6 +2554,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             g0=g0,
         )
 
+        if not opt_result.success:
+            warn(f"Optimizer did not succeed. Message: {opt_result.message}")
+
         # Retrieve solution and perform similarity transform accordingly
         opt_coefficients = list(opt_result.x)
         orb_params = opt_coefficients[: self.orb_opt_dim]
@@ -3194,6 +3211,9 @@ class LinAlgAdapt(AdaptVQE):
         # Remember that orbital optimization coefficients come first
         gradients = orb_gradients + gradients
 
+        # print("In LinAlgAdapt.estimate_gradients.")
+        # print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
+
         return gradients
 
     def estimate_snd_derivative_1var(
@@ -3800,3 +3820,400 @@ class SampledLinAlgAdapt(LinAlgAdapt):
     @property
     def name(self):
         return "sampled_linal_adapt"
+
+
+class TensorNetAdapt(AdaptVQE):
+    """ADAPT VQE with tensor networks for the states and operators."""
+
+    def __init__(self, *args, **kvargs):
+
+        kvargs["pool"].imp_type = ImplementationType.TENSORS
+
+        super().__init__(*args, **kvargs)
+
+        if self.shots:
+            raise ValueError("Finite number of shots not compatible with TensorNetAdapt class.")
+
+        self.state = self.tn_ref_state
+        self.ref_state = self.tn_ref_state
+
+    def evaluate_observable(
+        self,
+        observable: MatrixProductOperator,
+        coefficients=None,
+        indices=None,
+        ref_state=None,
+        orb_params=None,
+    ) -> float:
+        """
+        Evaluates the observable in the state specified by the list of coefficients and indices
+
+        Arguments:
+            observable (MatrixProductOperator): the hermitian operator to be measured
+            coefficients (list): the coefficients of the ansatz
+            indices (list): the indices of the pool operators defining the ansatz
+            ref_state (csc_matrix): the reference state to consider
+            orb_params (list): the parameters for the orbital optimization
+
+        Returns:
+            exp_value (float): the exact expectation value of the observable
+        """
+
+        ket = self.get_state(coefficients, indices, ref_state)
+
+        if orb_params is not None:
+            orb_rotation_generator = self.create_orb_rotation_generator(orb_params)
+            if orb_rotation_generator is not None:
+                ket = expm_multiply(orb_rotation_generator, ket)
+
+        if len(observable.tensors) != len(ket.tensors):
+            warn(f"Observable has {len(observable.tensors)} tensors but MPS has {len(ket.tensors)}.")
+
+        obs_on_ket = observable.apply(ket)
+        exp_value = (ket.H @ obs_on_ket).real
+
+        return exp_value
+    
+    def evaluate_energy(self, coefficients=None, indices=None, ref_state=None, orb_params=None):
+        return self.evaluate_observable(
+            self.hamiltonian_mpo,
+            coefficients=coefficients,
+            indices=indices,
+            ref_state=ref_state,
+            orb_params=orb_params
+        )
+
+    @property
+    def name(self):
+        return "tensor-net-adapt"
+
+    def compute_state(self, coefficients=None, indices=None, ref_state=None, bra=False):
+        """
+        Calculates the state specified by the list of coefficients and indices. If coefficients or indices are None, the
+        current ones are assumed.
+
+        Arguments:
+            coefficients (list): the coefficients of the ansatz
+            indices (list): the indices of the pool operators defining the ansatz
+            ref_state (MatrixProductState): the reference state in which the ansatz acts
+            bra (bool): whether to return the adjoint of the state
+
+        Returns:
+            state (csc_matrix): the desired state
+        """
+
+        if indices is None:
+            indices = self.indices
+        if coefficients is None:
+            coefficients = self.coefficients
+
+        if ref_state is None:
+            ref_state = self.tn_ref_state
+        state = ref_state.copy()
+
+        if bra:
+            coefficients = [-c for c in reversed(coefficients)]
+            indices = reversed(indices)
+
+        # Apply e ** (coefficient * operator) to the state (ket) for each
+        # operator in the ansatz, following the order of the list
+        for coefficient, index in zip(coefficients, indices):
+            # Exponentiate the operator and update ket to represent the state after
+            # this operator has been applied
+            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond)
+        if bra:
+            state = state.H
+
+        return state
+
+    def create_orb_rotation_generator(self, orb_params):
+        """
+        Create orbital rotation generator from self.orb_ops and the provided parameters.
+
+        Arguments:
+            orb_params (list): the parameters to multiply each operator in self.orb_ops
+
+        Returns:
+            generator (MatrixProdctOperator): the generator of the orbital rotation
+        """
+
+        return None
+
+    def save_hamiltonian(self, hamiltonian):
+        """
+        Store the provided hamiltonian as self.hamiltonian attribute as a QubitOperator.
+        Also converts it to an MPO.
+
+        Arguments:
+            hamiltonian (Union[InteractionOperator,csc_matrix])
+        """
+
+        self.hamiltonian = hamiltonian
+        self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
+
+    def create_orb_rotation_ops(self):
+        """
+        Create list of orbital rotation operators.
+        See https://doi.org/10.48550/arXiv.2212.11405
+        """
+
+        self.orb_ops = []
+        self.sparse_orb_ops = []
+
+    def observable_to_measurement(self, observable):
+        return observable
+
+    def eval_candidate_gradient_prepending(
+        self,
+        index,
+        method="an",
+        dx=10**-8,
+        orb_params=None,
+    ):
+        """
+        Estimates the gradient of unitary generated by pool operator if they are prepended to the ansatz (added
+        right after the reference state, beginning of the circuit) at point zero.
+
+        Args:
+            index (int): index of pool operator
+            method (str): the method for estimating the gradient
+            dx (float): the step size used for the finite difference approximation
+            orb_params (list): the parameters for the orbital optimization, if applicable
+
+        Returns:
+            gradient (float): the gradient
+        """
+
+        if method == "fd":
+            # Finite differences are implemented in parent class
+            return super().eval_candidate_gradient_prepending(index, method, dx, orb_params)
+
+        if method != "an":
+            raise ValueError(f"Method {method} is not supported.")
+
+        if self.orb_opt:
+            raise NotImplementedError("This class does not implement orbital rotations.")
+
+        if self.data is not None:
+            coefficients = self.coefficients.copy()
+            indices = self.indices
+        else:
+            coefficients = []
+            indices = []
+
+        operator_mpo = self.pool.get_mpo_op(index)
+
+        left_matrix = self.compute_state(coefficients, indices)
+
+        if self.pool.eig_decomp[index] is None:
+            hamiltonian = self.hamiltonian
+
+        else:
+            hamiltonian = self.hamiltonian.todense()
+        hamiltonian_mpo = self.hamiltonian_mpo
+
+        left_matrix = left_matrix.gate_with_mpo(hamiltonian_mpo)
+        right_matrix = self.tn_ref_state
+        right_matrix = self.compute_state(
+            coefficients,
+            indices,
+            ref_state=right_matrix.gate_with_mpo(operator_mpo)
+        )
+        # gradient = 2 * (left_matrix.dot(right_matrix))[0, 0].real
+        gradient = 2 * (left_matrix.H @ right_matrix).data.real
+
+        return gradient
+
+    def eval_candidate_gradients_prepending(
+        self,
+        method="an",
+        dx=10**-8,
+        orb_params=None,
+    ):
+        """
+        Estimates the gradient of unitaries generated by each pool operator if they are prepended to the ansatz (added
+        right after the reference state, beginning of the circuit) at point zero.
+
+        Args:
+            index (int): index of pool operator
+            method (str): the method for estimating the gradient
+            dx (float): the step size used for the finite difference approximation
+            orb_params (list): the parameters for the orbital optimization, if applicable
+
+        Returns:
+            gradients (list): the list of gradients, in the same order as the pool operator list
+            norm (float): the norm of the gradient
+        """
+
+        if method == "fd":
+            # Finite differences are implemented in parent class
+            return super().eval_candidate_gradients_prepending(method,dx,orb_params)
+
+        if method != "an":
+            raise ValueError(f"Method {method} is not supported.")
+
+        if self.orb_opt:
+            raise NotImplementedError("This class does not support orbital rotations.")
+
+        if self.data is not None:
+            coefficients = self.coefficients.copy()
+            indices = self.indices
+        else:
+            coefficients = []
+            indices = []
+
+        gradients = []
+        norm = 0
+
+        left_matrix = self.compute_state(coefficients, indices)
+
+        if self.pool.eig_decomp[0] is None:
+            hamiltonian = self.hamiltonian
+
+        else:
+            hamiltonian = csc_matrix(self.hamiltonian)#.todense()
+        hamiltonian_mpo = self.hamiltonian_mpo
+
+        left_matrix = left_matrix.gate_with_mpo(hamiltonian_mpo)
+        right_matrix = self.tn_ref_state
+
+        for index in range(self.pool.size):
+            operator = self.pool.get_mpo_op(index)
+            new_right_matrix = self.compute_state(
+                coefficients,
+                indices,
+                ref_state=right_matrix.gate_with_mpo(operator)
+            )
+            gradient = 2 * (left_matrix.H @ new_right_matrix)[0, 0].real
+            gradients.append(gradient)
+            norm += gradient**2
+
+        return gradients, np.sqrt(norm)
+
+    def estimate_gradients(
+        self, coefficients=None, indices=None, method="an", dx=10**-8, orb_params=None
+    ):
+        """
+        Estimates the gradients of all operators in the ansatz defined by coefficients and indices. If they are None,
+        the current state is assumed. Default method is analytical (with unitary recycling for faster execution).
+
+        Args:
+            coefficients (list): the coefficients of the ansatz. If None, current coefficients will be used.
+            indices (list): the indices of the ansatz. If None, current indices will be used.
+            method (str): the method for estimating the gradient
+            dx (float): the step size used for the finite difference approximation
+            orb_params (list): the parameters for the orbital optimization, if applicable
+
+        Returns:
+            gradients (list): the gradient vector
+        """
+
+        if method == "fd":
+            # Finite differences are implemented in parent class
+            return super().estimate_gradients(
+                coefficients=coefficients, indices=indices, method=method, dx=dx
+            )
+
+        if method != "an":
+            raise ValueError(f"Method {method} is not supported.")
+
+        if indices is None:
+            assert coefficients is None
+            indices = self.indices
+            coefficients = self.coefficients
+
+        if self.orb_opt:
+            orb_params = coefficients[: self.orb_opt_dim]
+            coefficients = coefficients[self.orb_opt_dim :]
+        else:
+            orb_params = None
+
+        if not len(indices):
+            return []
+
+        # Define orbital rotation
+        hamiltonian = self.hamiltonian_mpo
+        if orb_params is not None:
+            raise NotImplementedError("This class does not implement orbital rotations.")
+
+        gradients = []
+        state = self.compute_state(coefficients, indices)
+        right_matrix = self.tn_ref_state
+        left_matrix = self.compute_state(
+            coefficients, indices, state.gate_with_mpo(hamiltonian), bra=True
+        )
+
+        # Ansatz gradients
+        for operator_pos in range(len(indices)):
+            operator = self.pool.get_mpo_op(indices[operator_pos])
+            coefficient = coefficients[operator_pos]
+            index = indices[operator_pos]
+
+            # left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix)
+            left_matrix = self.pool.tn_expm_mult_state(coefficient, index, left_matrix.H, max_bond=self.max_mps_bond).H
+            right_matrix = self.pool.tn_expm_mult_state(coefficient, index, right_matrix, max_bond=self.max_mps_bond)
+
+            # gradient = 2 * (left_matrix.H @ right_matrix.gate_with_mpo(operator)).real
+            gradient = 2 * (left_matrix @ right_matrix.gate_with_mpo(operator)).real
+            gradients.append(gradient)
+
+        left_matrix = right_matrix.H
+
+        # Orbital gradients
+        orb_gradients = []
+        for operator in self.sparse_orb_ops:
+            gradient = 2 * (
+                left_matrix.gate_with_mpo(hamiltonian).H @ operator @ right_matrix
+            ).data.real
+            orb_gradients.append(gradient)
+
+        # Remember that orbital optimization coefficients come first
+        gradients = orb_gradients + gradients
+
+        # print("In TensorNetAdapt.estimate_gradients.")
+        # print(f"With coefficients\n{coefficients}\ngot gradient\n{gradients}")
+
+        return gradients
+
+    def eval_candidate_gradient(self, index, coefficients=None, indices=None):
+        """
+        Calculates the norm of the gradient of a candidate operator if appended to the current state (or a different
+        one, if coefficients and indices are provided; however this is never necessary in a normal run).
+        Uses dexp(c*A)/dc = <psi|[H,A]|psi> = 2 * real(<psi|HA|psi>).
+        This is the gradient calculated at c = 0, which will be the initial value of the coefficient in the
+        optimization.
+        Only the absolute value is returned.
+
+        Arguments:
+            index (int): the index that labels this operator
+            coefficients (list): the coefficients of the ansatz. If not, current coefficients will be used.
+            indices (list): the indices of the ansatz. If not, current indices will be used.
+
+        Returns:
+          gradient (float): the norm of the gradient of this operator in
+          the current state
+        """
+
+        measurement = self.pool.get_grad_meas(index)
+
+        if measurement is None:
+            # Gradient observable for this operator has not been created yet
+
+            operator = self.pool.get_mpo_op(index, len(self.hamiltonian_mpo.tensors))
+            if len(operator.tensors) != len(self.hamiltonian_mpo.tensors):
+                raise AssertionError(f"Observable has {len(operator.tensors)} tensors and H has {len(self.hamiltonian_mpo.tensors)}")
+            observable = 2 * self.hamiltonian_mpo.apply(operator)
+
+        gradient = self.evaluate_observable(observable, coefficients, indices)
+
+        return gradient
+
+    def perform_sim_transform(self, orb_params):
+        """
+        Perform a similarity transform on the Hamiltonian.
+
+        Arguments:
+            orb_params (list): the parameters for the orbital tansformation
+        """
+
+        pass
