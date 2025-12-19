@@ -90,9 +90,9 @@ class TestH2Molecule(unittest.TestCase):
         all_close = []
         for index in range(len(pool.operators)):
             u_psi = pool.expm_mult(coefficient, index, psi)
-            u_psi_as_mps = MatrixProductState.from_dense(u_psi)
             u_psi_mps = pool.tn_expm_mult_state(coefficient, index, psi_mps, 100)
-            fidelity = abs(u_psi_as_mps.H @ u_psi_mps) ** 2
+            u_psi_mps_vec = u_psi_mps.to_dense()
+            fidelity = abs(np.vdot(u_psi_mps_vec, u_psi)) ** 2
             if fidelity >= 0.9:
                 all_close.append(True)
             else:
