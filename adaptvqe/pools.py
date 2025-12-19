@@ -38,7 +38,7 @@ from .circuits import (qe_circuit, pauli_exp_circuit, ovp_ceo_circuit, mvp_ceo_c
                        paired_f_swap_network_orderings, prepare_lnn_op, count_qe_lnn_swaps)
 from .chemistry import normalize_op
 from .op_conv import string_to_qop
-from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices)
+from .utils import (create_qes, get_operator_qubits, remove_z_string, tile, find_spin_preserving_exc_indices, invert_circuit_qubits)
 from .tensor_helpers import qubop_to_mpo
 
 # For debugging!
@@ -550,9 +550,10 @@ class OperatorPool(metaclass=abc.ABCMeta):
         TEBD to multiply it by the states."""
 
         evolution_circuit = self.get_circuit([index], [coefficient])
-        qasm_str = dumps(evolution_circuit)
-        print(evolution_circuit)
-        print(qasm_str)
+        swapped_circuit = invert_circuit_qubits(evolution_circuit)
+        qasm_str = dumps(swapped_circuit)
+        # print(evolution_circuit)
+        # print(qasm_str)
         circuit_mps = qtn.circuit.CircuitMPS.from_openqasm2_str(
             qasm_str, psi0=state.copy(), max_bond=max_bond, progbar=False
         )
