@@ -3872,7 +3872,7 @@ class TensorNetAdapt(AdaptVQE):
         for coefficient, index in zip(coefficients, indices):
             # Exponentiate the operator and update ket to represent the state after
             # this operator has been applied
-            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond)
+            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond, big_endian=False)
         if bra:
             state = state.H
 

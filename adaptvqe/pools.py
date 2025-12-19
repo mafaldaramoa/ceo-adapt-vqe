@@ -1400,7 +1400,7 @@ class PauliPool(SingletGSD):
         # '''
         return m
     
-    def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState, max_bond=None):
+    def tn_expm_mult_state(self, coefficient, index, state: MatrixProductState, max_bond=None, **kwargs):
         """exponentiates a pool operator times a coefficient, then multiplies it by a state."""
 
         if self.operators[index].mpo_operator is None:

@@ -140,12 +140,10 @@ class TestH2Molecule(unittest.TestCase):
 
         coeff = 0.2
         index = 2
-        print(f"operator: {pool.operators[index]}")
         la_state = la_adapt.get_state([coeff], [index]).todense()
         la_state_mps = MatrixProductState.from_dense(la_state)
         tn_state = tn_adapt.get_state([coeff], [index])
         fidelity = abs(la_state_mps.H @ tn_state) ** 2
-        print(f"fidelity = {fidelity:8.9e}")
         self.assertTrue(fidelity >= 0.9)
 
 if __name__ == "__main__":
