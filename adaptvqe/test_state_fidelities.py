@@ -93,12 +93,7 @@ class TestH2Molecule(unittest.TestCase):
             u_psi_mps = pool.tn_expm_mult_state(coefficient, index, psi_mps, 100, big_endian=False)
             u_psi_mps_vec = u_psi_mps.to_dense()
             fidelity = abs(np.vdot(u_psi_mps_vec, u_psi)) ** 2
-            if fidelity >= 0.9:
-                all_close.append(True)
-            else:
-                all_close.append(False)
-                print("Case failed.")
-            print(f"fidelity = {fidelity:4.5e}")
+            all_close.append(fidelity >= 0.9)
         self.assertTrue(all(all_close))
 
     def test_dev_ceo_random_state_circuit(self):
@@ -115,12 +110,7 @@ class TestH2Molecule(unittest.TestCase):
             u_psi = pool.expm_mult(coefficient, index, psi)
             u_psi_ckt = pool.expm_mult_circuit(coefficient, index, psi)
             fidelity = abs(np.vdot(u_psi, u_psi_ckt)) ** 2
-            if fidelity >= 0.9:
-                all_close.append(True)
-            else:
-                all_close.append(False)
-                print("Case failed.")
-            print(f"fidelity = {fidelity:4.5e}")
+            all_close.append(fidelity >= 0.9)
         self.assertTrue(all(all_close))
 
     def test_dev_ceo_pool(self):
