@@ -544,14 +544,13 @@ class OperatorPool(metaclass=abc.ABCMeta):
             m = m.real
             return m
         
-    def tn_expm_mult_state(self, coefficient, index, state, max_bond):
+    def tn_expm_mult_state(self, coefficient, index, state, max_bond, big_endian=True):
         """Multiply the state by the exponential of a pool operator. In the general case,
         this is done by getting the circuit for the exponential of the operator and using
         TEBD to multiply it by the states."""
 
-        evolution_circuit = self.get_circuit([index], [coefficient])
-        swapped_circuit = invert_circuit_qubits(evolution_circuit)
-        qasm_str = dumps(swapped_circuit)
+        evolution_circuit = self.get_circuit([index], [coefficient], big_endian=big_endian)
+        qasm_str = dumps(evolution_circuit)
         # print(evolution_circuit)
         # print(qasm_str)
         circuit_mps = qtn.circuit.CircuitMPS.from_openqasm2_str(
@@ -2018,7 +2017,7 @@ class QE(OperatorPool):
 
         return m
 
-    def get_circuit(self, indices, coefficients):
+    def get_circuit(self, indices, coefficients, big_endian=True):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
         Function for the QE pool only.
@@ -2030,7 +2029,7 @@ class QE(OperatorPool):
             operator = self.operators[index]
             source_orbs = operator.source_orbs
             target_orbs = operator.target_orbs
-            qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=True)
+            qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=big_endian)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
@@ -2283,17 +2282,17 @@ class CEO(OperatorPool):
 
         return m
 
-    def get_circuit(self, indices, coefficients):
+    def get_circuit(self, indices, coefficients, big_endian=True):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
         """
 
         if self.track_parents:
-            return self._get_mvp_ceo_circuit(indices, coefficients)
+            return self._get_mvp_ceo_circuit(indices, coefficients, big_endian=big_endian)
         else:
-            return self._get_ovp_ceo_circuit(indices, coefficients)
+            return self._get_ovp_ceo_circuit(indices, coefficients, big_endian=big_endian)
 
-    def _get_ovp_ceo_circuit(self, indices, coefficients):
+    def _get_ovp_ceo_circuit(self, indices, coefficients, big_endian=True):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
         Function for OVP-CEO pool only - no DVG- or DVE-CEO.
@@ -2306,14 +2305,14 @@ class CEO(OperatorPool):
             target_orbs = operator.target_orbs
             ceo_type = operator.ceo_type
             qc = ovp_ceo_circuit(source_orbs, target_orbs, self.n, coefficient,
-                                 ceo_type, big_endian=True)
+                                 ceo_type, big_endian=big_endian)
 
             circuit = circuit.compose(qc)
             circuit.barrier()
 
         return circuit
 
-    def _get_mvp_ceo_circuit(self, indices, coefficients):
+    def _get_mvp_ceo_circuit(self, indices, coefficients, big_endian=True):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
         Function for MVP-CEO pool. Also uses OVP-CEO circuits when those are more hardware-efficient.
@@ -2332,7 +2331,7 @@ class CEO(OperatorPool):
                 target_orbs = operator.target_orbs
                 ceo_type = operator.ceo_type
                 qc = ovp_ceo_circuit(source_orbs, target_orbs, self.n, coefficient,
-                                     ceo_type, big_endian=True)
+                                     ceo_type, big_endian=big_endian)
 
             else:
                 # MVP-CEO
@@ -2351,7 +2350,7 @@ class CEO(OperatorPool):
                     operator = self.operators[index]
                     source_orbs = operator.source_orbs
                     target_orbs = operator.target_orbs
-                    qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=True)
+                    qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=big_endian)
                     acc_indices = []
                     acc_cs = []
 
@@ -2360,7 +2359,7 @@ class CEO(OperatorPool):
                     q_op = QubitOperator()
                     for ix, c in zip(acc_indices, acc_cs):
                         q_op = q_op + c * self.operators[ix].q_operator
-                    qc = mvp_ceo_circuit(q_op, self.n, big_endian=True)
+                    qc = mvp_ceo_circuit(q_op, self.n, big_endian=big_endian)
                     acc_indices = []
                     acc_cs = []
 
@@ -2459,7 +2458,7 @@ class MVP_CEO(QE):
                          n=n,
                          source_ops=source_ops)
 
-    def get_circuit(self, indices, coefficients):
+    def get_circuit(self, indices, coefficients, big_endian=True):
         """
         Returns the circuit corresponding to the ansatz defined by the arguments.
         Function for MVP-CEO pool specifically.
@@ -2484,7 +2483,7 @@ class MVP_CEO(QE):
                 operator = self.operators[index]
                 source_orbs = operator.source_orbs
                 target_orbs = operator.target_orbs
-                qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=True)
+                qc = qe_circuit(source_orbs, target_orbs, coefficient, self.n, big_endian=big_endian)
                 acc_indices = []
                 acc_cs = []
 
@@ -2493,7 +2492,7 @@ class MVP_CEO(QE):
                 q_op = QubitOperator()
                 for ix, c in zip(acc_indices, acc_cs):
                     q_op = q_op + c * self.operators[ix].q_operator
-                qc = mvp_ceo_circuit(q_op, self.n, big_endian=True)
+                qc = mvp_ceo_circuit(q_op, self.n, big_endian=big_endian)
                 acc_indices = []
                 acc_cs = []
 
