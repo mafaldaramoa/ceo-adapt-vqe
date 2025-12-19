@@ -50,9 +50,9 @@ class TestH2Molecule(unittest.TestCase):
         molecule = create_h2(r)
         pool = FullPauliPool(molecule)
         pool.imp_type = ImplementationType.SPARSE
-        coefficient = 0.5
         all_close = []
         for index in range(len(pool.operators)):
+            coefficient = np.random.rand()
             u = pool.expm(coefficient, index).todense()
             ckt = pool.get_circuit([index], [coefficient])
             ckt_op = Operator.from_circuit(ckt)
@@ -65,9 +65,9 @@ class TestH2Molecule(unittest.TestCase):
         molecule = create_h2(r)
         pool = DVE_CEO(molecule)
         pool.imp_type = ImplementationType.SPARSE
-        coefficient = 0.5
         all_close = []
         for index in range(len(pool.operators)):
+            coefficient = np.random.rand()
             u = pool.expm(coefficient, index).todense()
             ckt = pool.get_circuit([index], [coefficient])
             ckt_op = Operator.from_circuit(ckt)
@@ -75,6 +75,52 @@ class TestH2Molecule(unittest.TestCase):
             # ac = np.allclose(u_ckt, u)
             ac = equal_up_to_global_phase(u_ckt, u)
             all_close.append(ac)
+        self.assertTrue(all(all_close))
+
+    def test_dev_ceo_random_state(self):
+        r = 1.5
+        molecule = create_h2(r)
+        pool = DVE_CEO(molecule)
+        pool.imp_type = ImplementationType.SPARSE
+        nq = pool.n
+        psi = np.random.rand(2 ** nq).astype(complex)
+        psi = psi / norm(psi)
+        psi_mps = MatrixProductState.from_dense(psi)
+        coefficient = np.random.rand()
+        all_close = []
+        for index in range(len(pool.operators)):
+            u_psi = pool.expm_mult(coefficient, index, psi)
+            u_psi_as_mps = MatrixProductState.from_dense(u_psi)
+            u_psi_mps = pool.tn_expm_mult_state(coefficient, index, psi_mps, 100)
+            fidelity = abs(u_psi_as_mps.H @ u_psi_mps) ** 2
+            if fidelity >= 0.9:
+                all_close.append(True)
+            else:
+                all_close.append(False)
+                print("Case failed.")
+            print(f"fidelity = {fidelity:4.5e}")
+        self.assertTrue(all(all_close))
+
+    def test_dev_ceo_random_state_circuit(self):
+        r = 1.5
+        molecule = create_h2(r)
+        pool = DVE_CEO(molecule)
+        pool.imp_type = ImplementationType.SPARSE
+        nq = pool.n
+        psi = np.random.rand(2 ** nq).astype(complex)
+        psi = psi / norm(psi)
+        all_close = []
+        for index in range(len(pool.operators)):
+            coefficient = np.random.rand()
+            u_psi = pool.expm_mult(coefficient, index, psi)
+            u_psi_ckt = pool.expm_mult_circuit(coefficient, index, psi)
+            fidelity = abs(np.vdot(u_psi, u_psi_ckt)) ** 2
+            if fidelity >= 0.9:
+                all_close.append(True)
+            else:
+                all_close.append(False)
+                print("Case failed.")
+            print(f"fidelity = {fidelity:4.5e}")
         self.assertTrue(all(all_close))
 
     def test_dev_ceo_pool(self):
@@ -99,10 +145,11 @@ class TestH2Molecule(unittest.TestCase):
             tetris=True,
             verbose=True,
             threshold=0.1,
+            max_mps_bond=100
         )
 
         coeff = 0.2
-        index = 0
+        index = 2
         print(f"operator: {pool.operators[index]}")
         la_state = la_adapt.get_state([coeff], [index]).todense()
         la_state_mps = MatrixProductState.from_dense(la_state)

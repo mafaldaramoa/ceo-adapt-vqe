@@ -25,6 +25,7 @@ from openfermion.transforms import freeze_orbitals
 
 from qiskit import QuantumCircuit
 from qiskit.qasm2 import dumps
+from qiskit.quantum_info import Operator
 
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import expm, expm_multiply
@@ -550,10 +551,21 @@ class OperatorPool(metaclass=abc.ABCMeta):
 
         evolution_circuit = self.get_circuit([index], [coefficient])
         qasm_str = dumps(evolution_circuit)
+        print(evolution_circuit)
+        print(qasm_str)
         circuit_mps = qtn.circuit.CircuitMPS.from_openqasm2_str(
-            qasm_str, psi0=state, max_bond=max_bond, progbar=False
+            qasm_str, psi0=state.copy(), max_bond=max_bond, progbar=False
         )
         return circuit_mps.psi
+
+    def expm_mult_circuit(self, coefficient, index, state):
+        """Do an expm_mult using the generated circuit.
+        For debugging purposes."""
+
+        evolution_circuit = self.get_circuit([index], [coefficient])
+        ckt_op = Operator.from_circuit(evolution_circuit)
+        u_ckt = ckt_op.data
+        return u_ckt @ state
 
     def adj_expm_mult(self, coefficient, index, other):
         """
