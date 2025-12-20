@@ -17,7 +17,7 @@ pool = DVE_CEO(molecule)
 my_adapt = TensorNetAdapt(
     pool=pool,
     molecule=molecule,
-    max_adapt_iter=1,
+    max_adapt_iter=3,
     recycle_hessian=True,
     tetris=True,
     verbose=True,
@@ -51,5 +51,3 @@ print("Evolution of ansatz CNOT depths: ", data.acc_cnot_depths(pool))
 print("Final coefficients and indices:")
 print(my_adapt.coefficients)
 print(my_adapt.indices)
-print("Final state/initial state fidelity:")
-print(abs(my_adapt.tn_ref_state.H @ my_adapt.state) ** 2)
