@@ -60,6 +60,7 @@ class HubbardHamiltonian:
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
         self.ref_det = neel_state_cb
+        self.tn_ref_state = computational_basis_mps(neel_state_cb)
 
         """
         # Use non interacting ground state instead of Néel as the reference state:
@@ -154,7 +155,7 @@ class XXZHamiltonian:
                 else:
                     max_mpo_bond = 300
                 ham_cirq = of.transforms.qubit_operator_to_pauli_sum(h)
-                qs = cirq.LineQubit.range(self.n)
+                # qs = cirq.LineQubit.range(self.n)
                 # ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
                 ham_mpo = qubop_to_mpo(h, max_mpo_bond)
                 dmrg = DMRG(ham_mpo, bond_dims=max_mps_bond)
