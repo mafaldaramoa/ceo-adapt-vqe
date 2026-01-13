@@ -7,13 +7,17 @@ Created on Thu Jul 28 14:31:26 2022
 """
 import numpy as np
 import pickle
+from pyscf import ao2mo
+from pyscf.tools.fcidump import read
 
 from openfermion import (jordan_wigner,
                          FermionOperator,
                          QubitOperator,
+                         InteractionOperator,
                          hermitian_conjugated,
                          normal_ordered,
                          count_qubits)
+from openfermion.chem.molecular_data import spinorb_from_spatial
 
 import qiskit
 
@@ -483,3 +487,68 @@ def invert_circuit_qubits(ckt: qiskit.QuantumCircuit) -> qiskit.QuantumCircuit:
     perm.reverse()
     swap_ckt.append(qiskit.circuit.library.PermutationGate(perm), range(nq))
     return swap_ckt.compose(ckt)
+
+
+def hamiltonian_from_fcidump(path):
+    """
+    Gets the Openfermion Hamiltonian from an FCIDUMP file
+    """
+
+    data = read(path,verbose=False)
+
+    ecore = data['ECORE']
+    nelec = data['NELEC']
+    norb = data['NORB']
+    h1 = data['H1']
+
+    # Rebuild 4-index tensor from flattened H2
+    h2_packed = data["H2"]
+    h2 = ao2mo.restore(1, h2_packed, norb)  # (norb,norb,norb,norb)
+
+    """
+    # openfermion seems to expect the integrals reordered as p^ r^ s q
+    # whereas pyscf stores them as (p,q,r,s)
+    h2_temp = np.zeros((4, 4, 4, 4))
+    for p in range(norb):
+        for q in range(norb):
+            for r in range(norb):
+                for s in range(norb):
+                    h2_temp[p, r, s, q] = h2[p, q, r, s]
+
+    h1_new, h2_new = get_tensors_from_integrals(h1, h2_temp)
+    """
+
+    # Shorter code:
+    h2 = 0.5 * np.asarray(h2.transpose(0, 2, 3, 1), order="C")
+    h1_new, h2_new = spinorb_from_spatial(h1, h2)
+
+    h = InteractionOperator(ecore, h1_new, h2_new)
+
+    return h, norb*2, nelec
+
+
+
+def hamiltonian_from_npz(path):
+    """
+    Gets the Openfermion Hamiltonian from an NPZ file
+    """
+    data = np.load(path)
+
+    # Get core energy and one-/two-body tensors
+    ecore = data['ECORE']
+    h1 = np.array(data['H1'])
+    h2 = np.array(data['H2'])
+    norb = data["NORB"]
+    nelec = data["NELEC"]
+
+    # Get number of alpha and beta electrons
+    n_a = int(nelec/2)
+    n_b = int(nelec/2)
+
+    h2 = 0.5 * np.asarray(h2.transpose(0, 2, 3, 1), order="C")
+    h1_new, h2_new = spinorb_from_spatial(h1, h2)
+
+    # Get the Hamiltonian and transform it to FermionOperator
+    h = InteractionOperator(ecore.item(), h1_new, h2_new)
+
+    return h, norb*2, nelec
