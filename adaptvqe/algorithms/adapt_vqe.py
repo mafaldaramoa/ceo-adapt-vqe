@@ -526,7 +526,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
             nnz_g_parents = []
             parents = self.pool.get_parents(index)
             if parents is not None:
-                [p_index for p_index in parents if parent_gradients[p_index]]
+                nnz_g_parents = [p_index for p_index in parents if parent_gradients[p_index]]
 
             if np.abs(gradient) < 10**-8:
                 continue
