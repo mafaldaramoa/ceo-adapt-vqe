@@ -12,6 +12,7 @@ import abc
 import numpy as np
 import scipy
 
+from itertools import chain
 from scipy.sparse import csc_matrix, issparse
 from scipy.sparse.linalg import expm, expm_multiply
 
@@ -513,25 +514,30 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         if self.verbose and not silent:
             print("\nNon-Zero Gradients (tolerance E-8):")
 
+        # If we're using a CEO pool: Compute QE (parent) gradients
         parent_gradients = {}
-        for index in range(self.pool.size):
+        for index in self.pool.parent_range:
 
             gradient = self.eval_candidate_gradient(index, coefficients, indices)
+            parent_gradients[index] = gradient
 
-            if index in self.pool.parent_range:
-                parent_gradients[index] = gradient
-            else:
-                total_norm += gradient**2
+        # Compute actual pool gradients (singles/doubles)
+        for index in chain(range(self.pool.parent_range.start),
+                           range(self.pool.parent_range.start,self.pool.size)):
+
+            gradient = self.eval_candidate_gradient(index, coefficients, indices)
+            total_norm += gradient**2
 
             nnz_g_parents = []
             parents = self.pool.get_parents(index)
+
             if parents is not None:
                 nnz_g_parents = [p_index for p_index in parents if parent_gradients[p_index]]
 
+            gradient = self.penalize_gradient(gradient, index, silent,nnz_g_parents)
+
             if np.abs(gradient) < 10**-8:
                 continue
-
-            gradient = self.penalize_gradient(gradient, index, silent,nnz_g_parents)
 
             # Find the index of the operator in the ordered gradient list
             sel_gradients, sel_indices = self.place_gradient(
@@ -549,6 +555,7 @@ class AdaptVQE(metaclass=abc.ABCMeta):
         print("Total gradient norm: {}".format(total_norm))
 
         return sel_indices, sel_gradients, total_norm, max_norm
+
 
     def place_gradient(self, gradient, index, sel_gradients, sel_indices):
         """
@@ -582,8 +589,9 @@ class AdaptVQE(metaclass=abc.ABCMeta):
 
         # i now contains the position of the operator in the list
         if i < self.window:
-            # The new operator has a place in the list; its gradient is higher than the gradient of at least the lowest
-            # gradient operator in the list. Insert it in the proper position
+            # The new operator has a place in the list; its gradient is higher than 
+            # the gradient of at least the lowest gradient operator in the list
+            #  Insert it in the proper position
 
             sel_indices = sel_indices[:i] + [index] + sel_indices[i : self.window - 1]
 
@@ -2813,7 +2821,6 @@ class LinAlgAdapt(AdaptVQE):
     Class for ADAPT-VQEs in which the energy and gradients are calculated using linear algebra.
     Expectation values are calculated exactly, with no sampling noise
     """
-
     hamiltonian = None
 
     def __init__(self, *args, **kvargs):

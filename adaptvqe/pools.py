@@ -279,7 +279,7 @@ class OperatorPool(metaclass=abc.ABCMeta):
         if self.name[:3] in ["DVG", "DVE"]:
             self.parent_range = range(i, self.parent_pool.size)
         else:
-            self.parent_range = []
+            self.parent_range = range(0)
 
         if fermionic_swaps:
             assert "CEO" in self.name or "QE" in self.name
