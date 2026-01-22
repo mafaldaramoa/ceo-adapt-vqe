@@ -405,6 +405,9 @@ def read_of_qubit_operator(operator):
         coefficient = coefficient.imag
         coefficients.append(coefficient)
 
+    assert len(coefficients) == len(operator.terms)
+    assert len(strings) == len(operator.terms)
+    assert len(qubit_lists) == len(operator.terms)
     return coefficients, strings, qubit_lists
 
 

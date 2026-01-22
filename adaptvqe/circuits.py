@@ -1,3 +1,5 @@
+from warnings import warn
+
 import re
 
 import numpy as np
@@ -323,6 +325,9 @@ def mvp_ceo_circuit(qubit_operator, n, big_endian=False):
     """
 
     coefficients, strings, qubit_lists = read_of_qubit_operator(qubit_operator)
+    if len(qubit_lists) == 0:
+        return QuantumCircuit(n)
+
     qubits = qubit_lists[0]
     assert all([qubit_list == qubits for qubit_list in qubit_lists])
     a, b, c, d = qubits
