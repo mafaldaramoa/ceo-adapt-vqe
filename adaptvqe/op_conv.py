@@ -427,3 +427,173 @@ def string_to_qop(string):
             op += f"{pauli}{i} "
 
     return QubitOperator(op)
+
+def get_remapped_f_hamiltonian(hamiltonian, mode_order):
+    """
+    Remaps a fermionic Hamiltonian to account for a nontrivial mode order. This is equivalent to applying fermionic
+        swap gates at the end of the circuit.
+
+    Arguments:
+        hamiltonian (Union[InteractionOperator,FermionOperator]): the Hamiltonian we want to remot
+        mode_order (list): the list assigning qubits to fermionic modes. mode_order[i] is the mode represented by
+            qubit i.
+
+    Returns:
+        remapped_hamiltonian (FermionOperator): the remapped Hamiltonian associated with a trivial mode order
+            (i.e., range(n))
+    """
+    if isinstance(hamiltonian, InteractionOperator):
+        hamiltonian = get_fermion_operator(hamiltonian)
+    elif not isinstance(hamiltonian, FermionOperator):
+        raise ValueError("Observable must be InteractionOperator or FermionOperator")
+
+    remapped_hamiltonian = FermionOperator()
+
+    for term, coeff in hamiltonian.terms.items():
+        new_term = ()
+        for mode,op in term:
+            new_term += ((mode_order.index(mode),op),)
+        remapped_hamiltonian += FermionOperator(new_term, coeff)
+
+    return remapped_hamiltonian
+
+def get_remapped_q_hamiltonian(hamiltonian, qubit_order):
+    """
+    Remaps a fermionic Hamiltonian to account for a nontrivial qubit order. This is equivalent to applying
+        swap gates at the end of the circuit.
+
+    Arguments:
+        hamiltonian (Union[InteractionOperator,FermionOperator]): the Hamiltonian we want to remap
+        qubit_order (list): the list assigning qubits to fermionic modes. mode_order[i] is the qubit represented by
+            physical qubit i.
+
+    Returns:
+        remapped_hamiltonian (QubitOperator): the remapped Hamiltonian associated with a trivial qubit order
+            (i.e., range(n))
+    """
+
+    if isinstance(hamiltonian,FermionOperator):
+        hamiltonian = jordan_wigner(hamiltonian)
+    elif not isinstance(hamiltonian,QubitOperator):
+        raise ValueError("Observable must be QubitOperator or FermionOperator")
+
+    swapped_hamiltonian = QubitOperator()
+
+    for term, coeff in hamiltonian.terms.items():
+        new_term = ()
+        for qubit,op in term:
+            new_term += ((qubit_order.index(qubit),op),)
+        swapped_hamiltonian += QubitOperator(new_term, coeff)
+
+    return swapped_hamiltonian
+
+
+def remap_hamiltonian_by_layout(hamiltonian, layout):
+    """
+    Remaps an observable to account for a Qiskit layout. This is equivalent to applying swap gates in classical
+    postprocessing.
+
+    Arguments:
+        hamiltonian (Union[QubitOperator,FermionOperator]): the Hamiltonian we want to remap.
+        layout (Layout): the layout we want to correct for.
+
+    Returns:
+        remapped_hamiltonian (QubitOperator): the remapped Hamiltonian associated with a trivial layout (i.e., range(n))
+    """
+
+    if isinstance(hamiltonian,FermionOperator):
+        hamiltonian = jordan_wigner(hamiltonian)
+    elif not isinstance(hamiltonian,QubitOperator):
+        raise ValueError("Observable must be QubitOperator or FermionOperator")
+
+    n = count_qubits(hamiltonian)
+    qubit_order = [n - 1 - layout.initial_layout[i]._index for i in range(n)][::-1]
+    remapped_hamiltonian = get_remapped_q_hamiltonian(hamiltonian, qubit_order)
+    qubit_order = [n - 1 - layout.final_layout[i]._index for i in range(n)][::-1]
+    remapped_hamiltonian = get_remapped_q_hamiltonian(remapped_hamiltonian, qubit_order)
+
+    return remapped_hamiltonian
+
+
+def convert_orbital_to_of(i,n):
+    """
+    Converts the index of a spin-orbital
+    From: all-alpha then all-beta (e.g. Qiskit)
+    To: alternating alpha/beta (e.g. Openfermion)
+
+    Arguments:
+        i (int): original index in all-alpha then all-beta ordering
+        n (int): total number of qubits
+    """
+    if i >= n/2:
+        return int(1 + 2*(i - n/2))
+    else:
+        return int(2*i)
+    
+
+def convert_orbital_from_of(i,n):
+    """
+    Converts the index of a spin-orbital
+    From: alternating alpha/beta (e.g. Openfermion)
+    To: all-alpha then all-beta (e.g. Qiskit)
+
+    Arguments:
+        i (int): original index in alternating alpha/beta ordering
+        n (int): total number of qubits
+    """
+    if i % 2 == 0: 
+        return i // 2
+    else:            
+        return int(n / 2 + (i - 1) / 2)
+
+
+def reverse_endianness(op, n_qubits):
+    """
+    Reverse the endianness of a QubitOperator.
+
+    Args:
+        op: QubitOperator to transform.
+        n_qubits: Total number of qubits (used to flip indices).
+
+    Returns:
+        QubitOperator with indices reversed.
+    """
+    new_op = QubitOperator()
+    for term, coeff in op.terms.items():
+        # term is a tuple of (index, 'X'/'Y'/'Z')
+        new_term = tuple((n_qubits - 1 - q, p) for q, p in term)
+        new_op += QubitOperator(new_term, coeff)
+    return new_op
+
+
+def qiskit_to_openfermion_order(op, n_orbitals):
+    """
+    Convert a FermionOperator defined with Qiskit-style ordering
+    (all alpha orbitals, then all beta) into OpenFermion ordering
+    (alpha/beta interleaved).
+
+    Args:
+        op: FermionOperator with Qiskit orbital ordering.
+        n_orbitals: Number of spatial orbitals.
+
+    Returns:
+        FermionOperator with OpenFermion orbital ordering.
+    """
+    new_op = FermionOperator()
+
+    for term, coeff in op.terms.items():
+        new_term = []
+        for idx, action in term:
+            if idx < n_orbitals:
+                # alpha orbital p
+                p = idx
+                new_idx = int(2 * p)
+            else:
+                # beta orbital p
+                p = idx - n_orbitals
+                new_idx = int(2 * p + 1)
+
+            new_term.append((new_idx, action))
+        new_op += FermionOperator(tuple(new_term), coeff)
+
+    return new_op

@@ -94,3 +94,55 @@ def convert_orbital_index(i,n):
         return int(1 + 2*(i - n/2))
     else:
         return int(2*i)
+    
+
+def my_jordan_wigner(fermion_operator):
+
+    # Initialize full qubit operator
+    transformed_operator = QubitOperator()
+    n = count_qubits(fermion_operator)
+
+    # Initialize dictionary mapping fermionic ladder operators to linear combinations of Pauli strings
+    lookup_ladder_terms = dict()
+
+    for term in fermion_operator.terms:
+
+        # Initialize qubit operator corresponding to this product of fermionic ladder operators
+        transformed_term = QubitOperator((), fermion_operator.terms[term])
+
+        # Loop through individual operators, transform and multiply.
+        for ladder_operator in term:
+
+            if ladder_operator not in lookup_ladder_terms:
+                # We haven't transformed this ladder term yet
+
+                # Get the index of the qubit the fermionic ladder operator acts on
+                i = ladder_operator[0] 
+
+                # Create anticommutation string
+                z_string_ixs = [k for k in range(n) if k<i] # Regular JW transform
+                # Use all-alpha then all-beta ordering for the Z string:
+                #z_string_ixs = [k for k in range(n) if convert_orbital_from_of(k,n)<convert_orbital_from_of(i,n)]
+                z_factors = tuple((index, 'Z') for index in z_string_ixs)
+
+                # Get the Pauli X + Z string
+                pauli_x_component = QubitOperator(z_factors + ((i, 'X'),), 0.5)
+
+                # Get the Pauli Y + Z string with appropriated coefficient (- for creation, + for annihilation)
+                if ladder_operator[1]:
+                    pauli_y_component = QubitOperator(
+                        z_factors + ((i, 'Y'),), -0.5j
+                    )
+                else:
+                    pauli_y_component = QubitOperator(
+                        z_factors + ((i, 'Y'),), 0.5j
+                    )
+                
+                # Construct the full qubit operator associated with this fermionic ladder operator
+                lookup_ladder_terms[ladder_operator] = pauli_x_component + pauli_y_component
+
+            transformed_term *= lookup_ladder_terms[ladder_operator]
+
+        transformed_operator += transformed_term
+
+    return transformed_operator

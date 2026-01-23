@@ -5,22 +5,23 @@ Created on Wed Jul  6 09:47:40 2022
 @author: mafal
 """
 
-from adaptvqe.molecules import create_h2
+from adaptvqe.molecules import create_h3
 from adaptvqe.pools import QE
 from adaptvqe.algorithms.adapt_vqe import LinAlgAdapt
 
 r = 1.5
-molecule = create_h2(r)
+molecule = create_h3(r)
 pool = QE(molecule)
 
 my_adapt = LinAlgAdapt(
     pool=pool,
     molecule=molecule,
-    max_adapt_iter=1,
+    max_adapt_iter=2,
     recycle_hessian=True,
     tetris=True,
     verbose=True,
-    threshold=0.1,
+    threshold=0.001,
+    penalize_cnots=True
 )
 
 my_adapt.run()

@@ -19,19 +19,6 @@ Creating a clean virtual environment using Anaconda is recommended. Python>=3.10
 
 Note that PySCF does not support Windows. You can use Windows Subsystem for Linux (WSL) to install a Linux distribution (e.g. Ubunto), then install Anaconda.
 
-The results in the papers were obtained with the following package versions:
-
-```
-qiskit 0.43.3
-pyscf 2.2.0
-openfermion 1.5.1
-openfermionpyscf 0.5
-scipy 1.10.1
-numpy 1.26.4
-```
-
-While I tried to make the code compatible with more recent releases, I cannot guarantee proper functioning or identical results with versions other than those specified.
-
 ## Test Systems
 
 All example scripts use the $H_2$ molecule as the simplest example. All other molecules featured in the papers can be created similarly (see submodule `molecules`). 
