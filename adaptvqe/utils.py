@@ -18,11 +18,8 @@ from openfermion import (jordan_wigner,
                          normal_ordered,
                          count_qubits)
 from openfermion.chem.molecular_data import spinorb_from_spatial
-<<<<<<< HEAD
 
 import qiskit
-=======
->>>>>>> mafalda-main
 
 from .op_conv import convert_hamiltonian, string_to_qop
 
