@@ -60,6 +60,7 @@ class HubbardHamiltonian:
         neel_state = csc_matrix(neel_state).transpose()
         self.ref_state = neel_state
         self.ref_det = neel_state_cb
+        self.tn_ref_state = computational_basis_mps(neel_state_cb)
 
         """
         # Use non interacting ground state instead of Néel as the reference state:
@@ -154,7 +155,7 @@ class XXZHamiltonian:
                 else:
                     max_mpo_bond = 300
                 ham_cirq = of.transforms.qubit_operator_to_pauli_sum(h)
-                qs = cirq.LineQubit.range(self.n)
+                # qs = cirq.LineQubit.range(self.n)
                 # ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
                 ham_mpo = qubop_to_mpo(h, max_mpo_bond)
                 dmrg = DMRG(ham_mpo, bond_dims=max_mps_bond)
@@ -308,7 +309,7 @@ class FermionicHamiltonian:
     """
     Class for molecular Hamiltonians represented by Openfermion FermionOperators
     """
-    def __init__(self, operator,description,n_electrons,n=None):
+    def __init__(self, operator,description,n_electrons,n=None, diag_mode: str="exact", **kwargs):
         """
         Initialize class instance.
 
@@ -320,6 +321,13 @@ class FermionicHamiltonian:
             n (int): the number of qubits the operator acts on, if greater than
                 count_qubits(operator)
         """
+
+        assert diag_mode in ["exact", "quimb"]
+        self._diag_mode = diag_mode
+
+        if self._diag_mode == "quimb":
+            self._max_mps_bond = kwargs["max_mps_bond"]
+            self._max_mpo_bond = kwargs["max_mpo_bond"]
 
         self.description = description
         self.operator = operator
@@ -343,11 +351,24 @@ class FermionicHamiltonian:
         """
 
         if self._ground_state is None:
-            ground_energy, ground_state = get_ground_state(
-                get_sparse_operator(self.operator)
-            )
-            self._ground_state = ground_state
-            self._ground_energy = ground_energy
+            if self._diag_mode == "exact":
+                ground_energy, ground_state = get_ground_state(
+                    get_sparse_operator(self.operator)
+                )
+                self._ground_state = ground_state
+                self._ground_energy = ground_energy
+            else:
+                if isinstance(self.operator, of.QubitOperator):
+                    ham_mpo = qubop_to_mpo(self.operator, self._max_mpo_bond)
+                else:
+                    op_jw = of.transforms.jordan_wigner(self.operator)
+                    ham_mpo = qubop_to_mpo(op_jw, self._max_mpo_bond)
+                dmrg = DMRG(ham_mpo, bond_dims=self._max_mps_bond)
+                converged = dmrg.solve()
+                if not converged:
+                    print("DMRG did not converge!")
+                self._ground_state = dmrg.state
+                self._ground_energy = dmrg.energy.real
 
         return self._ground_state
 
@@ -358,10 +379,15 @@ class FermionicHamiltonian:
         """
 
         if self._ground_energy is None:
-            ground_energy, ground_state = get_ground_state(
-                get_sparse_operator(self.operator)
-            )
-            self._ground_state = ground_state
-            self._ground_energy = ground_energy
+            if self._diag_mode == "exact":
+                ground_energy, ground_state = get_ground_state(
+                    get_sparse_operator(self.operator)
+                )
+                self._ground_state = ground_state
+                self._ground_energy = ground_energy
+            else:
+                # Calling this will set self._ground_state and self._ground_energy.
+                _ = self.ground_state
 
+        assert self._ground_energy is not None
         return self._ground_energy

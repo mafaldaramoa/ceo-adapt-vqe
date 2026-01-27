@@ -19,6 +19,8 @@ from openfermion import (jordan_wigner,
                          count_qubits)
 from openfermion.chem.molecular_data import spinorb_from_spatial
 
+import qiskit
+
 from .op_conv import convert_hamiltonian, string_to_qop
 
 
@@ -486,6 +488,18 @@ def appears_in(list1,list2):
             return True
 
     return False
+
+
+def invert_circuit_qubits(ckt: qiskit.QuantumCircuit) -> qiskit.QuantumCircuit:
+    """Swap all qubits in a circuit following the permutation [n-1, n-2, ..., 1, 0].
+    This is implemented with a qiskit Permute instruction at the beginning."""
+
+    nq = ckt.num_qubits
+    swap_ckt = qiskit.QuantumCircuit(nq)
+    perm = list(range(nq))
+    perm.reverse()
+    swap_ckt.append(qiskit.circuit.library.PermutationGate(perm), range(nq))
+    return swap_ckt.compose(ckt)
 
 
 def hamiltonian_from_fcidump(path):

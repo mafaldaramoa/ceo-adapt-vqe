@@ -3876,6 +3876,9 @@ class TensorNetAdapt(AdaptVQE):
         if len(observable.tensors) != len(ket.tensors):
             warn(f"Observable has {len(observable.tensors)} tensors but MPS has {len(ket.tensors)}.")
 
+        if len(observable.tensors) != len(ket.tensors):
+            warn(f"Observable has {(len(observable.tensors))} tensors and state has {len(ket.tensors)}.")
+
         obs_on_ket = observable.apply(ket)
         exp_value = (ket.H @ obs_on_ket).real
 
@@ -3927,7 +3930,7 @@ class TensorNetAdapt(AdaptVQE):
         for coefficient, index in zip(coefficients, indices):
             # Exponentiate the operator and update ket to represent the state after
             # this operator has been applied
-            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond)
+            state = self.pool.tn_expm_mult_state(coefficient, index, state, max_bond=self.max_mps_bond, big_endian=False)
         if bra:
             state = state.H
 
@@ -3956,7 +3959,11 @@ class TensorNetAdapt(AdaptVQE):
         """
 
         self.hamiltonian = hamiltonian
-        self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
+        if isinstance(hamiltonian, of.QubitOperator):
+            self.hamiltonian_mpo = qubop_to_mpo(hamiltonian, self.max_mpo_bond)
+        else:
+            ham_jw = of.transforms.jordan_wigner(hamiltonian)
+            self.hamiltonian_mpo = qubop_to_mpo(ham_jw, self.max_mpo_bond)
 
     def create_orb_rotation_ops(self):
         """
