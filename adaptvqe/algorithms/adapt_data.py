@@ -548,7 +548,7 @@ class AdaptData:
 
         return [self.result.ansatz.indices[i] for i in self.get_iteration_range(iteration)]
 
-    def get_circuit(self,pool,indices=None,coefficients=None):
+    def get_circuit(self,pool,indices=None,coefficients=None,include_ref=False):
         """
         Returns the QuantumCircuit implementing the ansatz defined by indices and coefficients. If they are None, final
         values are used.
@@ -562,18 +562,23 @@ class AdaptData:
         if coefficients is None:
             coefficients = self.result.ansatz.coefficients
 
-        return pool.get_circuit(indices, coefficients)
+        qc = pool.get_circuit(indices, coefficients)
 
-    def get_hf_circuit(self):
+        if include_ref:
+            qc = self.get_ref_circuit().compose(qc)
 
-        hf_circuit = QuantumCircuit(self.n)
+        return qc
+
+    def get_ref_circuit(self):
+
+        ref_circuit = QuantumCircuit(self.n)
         for q, s in enumerate(self.ref_det):
             if s:
-                hf_circuit.x(self.n - 1 - q)
+                ref_circuit.x(self.n - 1 - q)
 
-        return hf_circuit
+        return ref_circuit
 
-    def get_lnn_circuit(self,pool,iteration=None,apply_border_swaps=False,fake_params=False,include_hf=False,basis_gates=["rz","cx","x","sx","h","s"],):
+    def get_lnn_circuit(self,pool,iteration=None,apply_border_swaps=False,fake_params=False,include_ref=False,basis_gates=["rz","cx","x","sx","h","s"],):
         """
         Get the circuit representing the final ansatz, transpiled to LNN connectivity.
         The circuit will be composed of CNOTs + single qubit gates, and possibly swaps if apply_border_swaps flag is set.
@@ -601,11 +606,11 @@ class AdaptData:
             iteration = self.iteration_counter - 1
 
         if not self.lnn:
-            return self.qiskit_lnn_circuit(pool, iteration, apply_border_swaps,fake_params,include_hf=include_hf,basis_gates=basis_gates)
+            return self.qiskit_lnn_circuit(pool, iteration, apply_border_swaps,fake_params,include_ref=include_ref,basis_gates=basis_gates)
 
-        return self.swap_based_lnn_circuit(pool, iteration, apply_border_swaps,fake_params,include_hf=include_hf,basis_gates=basis_gates)
+        return self.swap_based_lnn_circuit(pool, iteration, apply_border_swaps,fake_params,include_ref=include_ref,basis_gates=basis_gates)
 
-    def qiskit_lnn_circuit(self,pool,iteration,apply_border_swaps,fake_params,include_hf,basis_gates=["rz","cx","x","sx","h","s"],):
+    def qiskit_lnn_circuit(self,pool,iteration,apply_border_swaps,fake_params,include_ref,basis_gates=["rz","cx","x","sx","h","s"],):
         """
         Get the circuit representing the final ansatz, transpiled to LNN connectivity using Qiskit's transpiler.
         The circuit will be composed of CNOTs + single qubit gates, and possibly swaps if apply_border_swaps flag is set.
@@ -631,8 +636,8 @@ class AdaptData:
         else:
             ansatz_coefficients = self.evolution.coefficients[iteration]
 
-        if include_hf:
-            circuit = self.get_hf_circuit()
+        if include_ref:
+            circuit = self.get_ref_circuit()
         else:
             circuit = QuantumCircuit(self.n)
 
@@ -654,7 +659,7 @@ class AdaptData:
         return lnn_circuit, acc_cnot_counts, layout
     
     
-    def swap_based_lnn_circuit(self,pool,iteration,apply_border_swaps,fake_params,include_hf,basis_gates=["rz","cx","x","sx","h","s"]):
+    def swap_based_lnn_circuit(self,pool,iteration,apply_border_swaps,fake_params,include_ref,basis_gates=["rz","cx","x","sx","h","s"]):
         """
         Get the circuit representing the final ansatz in a LNN architecture, implemented using (possibly fermionic)
         swap gates.
@@ -684,8 +689,8 @@ class AdaptData:
         else:
             ansatz_coefficients = self.evolution.coefficients[iteration]
 
-        if include_hf:
-            circuit = self.get_hf_circuit()
+        if include_ref:
+            circuit = self.get_ref_circuit()
         else:
             circuit = QuantumCircuit(self.n)
 
@@ -745,7 +750,7 @@ class AdaptData:
         return lnn_circuit, acc_cnot_counts, layout
 
 
-    def swap_based_lnn_circuit_old(self,pool,iteration,apply_border_swaps,fake_params,include_hf,basis_gates=["rz","cx","x","sx","h","s"]):
+    def swap_based_lnn_circuit_old(self,pool,iteration,apply_border_swaps,fake_params,include_ref,basis_gates=["rz","cx","x","sx","h","s"]):
         """
         Get the circuit representing the final ansatz in a LNN architecture, implemented using (possibly fermionic)
         swap gates.
@@ -775,8 +780,8 @@ class AdaptData:
         else:
             ansatz_coefficients = self.evolution.coefficients[iteration]
 
-        if include_hf:
-            circuit = self.get_hf_circuit()
+        if include_ref:
+            circuit = self.get_ref_circuit()
         else:
             circuit = QuantumCircuit(self.n)
 

@@ -56,7 +56,7 @@ print("LNN Final CNOT counts:", acc_cnot_counts[-1])
 
 # Get the energy from the circuit including reference state preparation and swap gates
 hamiltonian = molecule.get_molecular_hamiltonian()
-lnn_qc, _, layout = data.get_lnn_circuit(pool,apply_border_swaps=True,include_hf=True)
+lnn_qc, _, layout = data.get_lnn_circuit(pool,apply_border_swaps=True,include_ref=True)
 energy_swaps = get_circuit_energy(lnn_qc,hamiltonian)
 error_swaps = np.abs(energy_swaps-data.evolution.energies[-1])
 print("|Energy from circuit - ADAPT-VQE energy| for...\n"
@@ -66,7 +66,7 @@ print("|Energy from circuit - ADAPT-VQE energy| for...\n"
 assert error_swaps < 10**-8
 
 # Get the energy from the circuit including reference state preparation but no swap gates
-lnn_qc_no_swaps, acc_cnot_counts, layout = data.get_lnn_circuit(pool,apply_border_swaps=False,include_hf=True)
+lnn_qc_no_swaps, acc_cnot_counts, layout = data.get_lnn_circuit(pool,apply_border_swaps=False,include_ref=True)
 energy_no_swaps = get_circuit_energy(lnn_qc_no_swaps,hamiltonian)
 error_no_swaps = np.abs(energy_no_swaps-data.evolution.energies[-1])
 print("* Circuit without swaps, original Hamiltonian: ", error_no_swaps)
