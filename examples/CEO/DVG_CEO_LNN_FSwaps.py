@@ -1,17 +1,15 @@
-import numpy as np
-
-from openfermion import jordan_wigner
 from qiskit.quantum_info import Operator, process_fidelity
+import numpy as np
 
 from adaptvqe.molecules import create_h4
 from adaptvqe.pools import DVG_CEO
 from adaptvqe.algorithms.adapt_vqe import LinAlgAdapt
 from adaptvqe.circuits import get_circuit_energy
-from adaptvqe.op_conv import get_remapped_q_hamiltonian, remap_hamiltonian_by_layout
+from adaptvqe.op_conv import get_remapped_f_hamiltonian, remap_hamiltonian_by_layout
 
 r = 3
 molecule = create_h4(r)
-pool = DVG_CEO(molecule)
+pool = DVG_CEO(molecule,fermionic_swaps=True)
 
 # Run ADAPT-VQE with a CNOT penalty applied to operator gradients during the selection stage.
 # This favors the selection of operators that require lower gate counts to be implemented.
@@ -57,8 +55,8 @@ print("Final LNN ansatz circuit (without reference state):\n", lnn_qc_no_swaps_n
 print("LNN Final CNOT counts:", acc_cnot_counts[-1])
 
 # Get the energy from the circuit including reference state preparation and swap gates
-hamiltonian = jordan_wigner(molecule.get_molecular_hamiltonian())
-lnn_qc, _, layout = data.get_lnn_circuit(pool,apply_border_swaps=True,include_hf=True)
+hamiltonian = molecule.get_molecular_hamiltonian()
+lnn_qc, _, layout = data.get_lnn_circuit(pool,apply_border_swaps=True,include_ref=True)
 energy_swaps = get_circuit_energy(lnn_qc,hamiltonian)
 error_swaps = np.abs(energy_swaps-data.evolution.energies[-1])
 print("|Energy from circuit - ADAPT-VQE energy| for...\n"
@@ -68,17 +66,17 @@ print("|Energy from circuit - ADAPT-VQE energy| for...\n"
 assert error_swaps < 10**-8
 
 # Get the energy from the circuit including reference state preparation but no swap gates
-lnn_qc_no_swaps, acc_cnot_counts, layout = data.get_lnn_circuit(pool,apply_border_swaps=False,include_hf=True)
+lnn_qc_no_swaps, acc_cnot_counts, layout = data.get_lnn_circuit(pool,apply_border_swaps=False,include_ref=True)
 energy_no_swaps = get_circuit_energy(lnn_qc_no_swaps,hamiltonian)
 error_no_swaps = np.abs(energy_no_swaps-data.evolution.energies[-1])
 print("* Circuit without swaps, original Hamiltonian: ", error_no_swaps)
 
 # Get the energy from the circuit including reference state preparation but no swap gates, but remapping the Hamiltonian
-#to account for the nontrivial layout and qubit order
+#to account for the nontrivial layout and mode order
 
-# First: remap qubits to account for swap gates
+# First: remap fermionic modes to account for fermionic swap gates
 qubit_order = data.evolution.qubit_orders[-1]
-remapped_hamiltonian = get_remapped_q_hamiltonian(hamiltonian, qubit_order)
+remapped_hamiltonian = get_remapped_f_hamiltonian(hamiltonian, qubit_order)
 
 # Second: remap qubits to account for nontrivial layout
 remapped_hamiltonian = remap_hamiltonian_by_layout(remapped_hamiltonian,layout)
