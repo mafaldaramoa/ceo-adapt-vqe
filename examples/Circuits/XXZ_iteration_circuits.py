@@ -1,10 +1,4 @@
-import numpy as np
-from scipy.sparse.linalg import expm, expm_multiply
-
-from openfermion import get_sparse_operator
-from qiskit.quantum_info import Operator, process_fidelity
-
-from adaptvqe.pools import FullPauliPool, TiledPauliPool
+from adaptvqe.pools import FullPauliPool
 from adaptvqe.algorithms.adapt_vqe import LinAlgAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
 from adaptvqe.circuits import get_circuit_energy
@@ -20,20 +14,23 @@ my_adapt = LinAlgAdapt(
     custom_hamiltonian=h,
     verbose=False,
     threshold=10**-5,
-    max_adapt_iter=5,
+    max_adapt_iter=3,
     max_opt_iter=10000,
     sel_criterion="gradient",
     recycle_hessian=False,
     rand_degenerate=True,
 )
-my_adapt.initialize()
+my_adapt.run()
+data = my_adapt.data
 
 circuits = []
-for _ in range(3):
-    my_adapt.run_iteration()
-    data = my_adapt.data
-    circuit = data.get_circuit(
-        pool, indices=my_adapt.indices, coefficients=my_adapt.coefficients,
-        include_ref=True
-    )
+for i,(indices, coefficients) in enumerate(zip(data.evolution.indices,
+                                               data.evolution.coefficients)):
+    circuit = data.get_circuit(pool,
+                               indices,
+                               coefficients,
+                               include_ref=True)
     circuits.append(circuit)
+    assert (data.evolution.energies[i] - 
+            get_circuit_energy(circuit,h.operator)
+            < 10**-8)

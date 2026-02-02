@@ -1,13 +1,7 @@
 """Using TensorNetAdapt, optimize the Ansatz at a low bond dimension. Then
 simulate the resulting circuit exactly and see what the exact energy is."""
 
-import numpy as np
-from scipy.sparse.linalg import expm, expm_multiply
-
-from openfermion import get_sparse_operator
-from qiskit.quantum_info import Operator, process_fidelity
-
-from adaptvqe.pools import FullPauliPool, TiledPauliPool
+from adaptvqe.pools import FullPauliPool
 from adaptvqe.algorithms.adapt_vqe import TensorNetAdapt
 from adaptvqe.hamiltonians import XXZHamiltonian
 from adaptvqe.circuits import get_circuit_energy
