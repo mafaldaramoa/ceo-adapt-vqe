@@ -1537,6 +1537,9 @@ class PauliPool(SingletGSD):
         circuit = QuantumCircuit(self.n)
 
         for i, (index, coefficient) in enumerate(zip(indices, coefficients)):
+            assert index in range(len(self.operators)), (
+                f"Got index {index} for pool of {len(self.operators)} operators."
+            )
             qubit_operator = coefficient * self.operators[index].q_operator
             qc = pauli_exp_circuit(qubit_operator, self.n, revert_endianness=True)
 
