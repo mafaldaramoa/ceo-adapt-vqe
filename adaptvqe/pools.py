@@ -2863,3 +2863,47 @@ class TiledCEO(CEO):
                         self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, parents=parents,
                                           source_orbs=source_orbs, target_orbs=target_orbs,
                                           ceo_type="diff")
+
+
+class PairedDoubleCEO(CEO):
+    """A CEO pool with only paired double excitations. OpenFermion follows the convention that
+    all even indices are spin-up and all odd indices are spin-down. So, a paired double excitation
+    would have the form [(p+1)^ p^ (r+1) r] for p, r even."""
+
+    def create_doubles(self):
+        """
+        Create one-body CEOs.
+        """
+
+        for p in range(0, self.n):
+            for r in range(p + 1, self.n):
+                # Only do values where p and r represent spin-up (p, r are even).
+                if p % 2 != 0:
+                    continue
+
+                if r % 2 != 0:
+                    continue
+
+                q = p + 1
+                s = r + 1
+
+                if (p + q + r + s) % 2 != 0:
+                    continue
+
+                if self.track_parents:
+                    parents = self.parent_pool.get_ops_on_qubits([p, q, r, s])
+                else:
+                    parents = None
+
+                q_operators, orbs = create_excitations(p, q, r, s, fermionic=self.fermionic_swaps)
+
+                for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
+
+                    if self.sum:
+                        self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                          parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
+                                          ceo_type="sum")
+                    if self.diff:
+                        self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                          parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
+                                          ceo_type="diff")
