@@ -2907,3 +2907,64 @@ class PairedDoubleCEO(CEO):
                         self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
                                           parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
                                           ceo_type="diff")
+
+
+class OccupiedVirtualCEO(CEO):
+    """A CEO pool where all of the doubles are just excitations of the form
+    a^dagger_a a^dagger_b a_i a_j, where a and b are virtual orbitals and i and j
+    are occupied orbitals. This class assumes that the first n_occ-many orbitals
+    in the Hamiltonian (indices 0, ..., n_occ-1 in openfermion) are the occupied ones."""
+
+    def __init__(
+        self,
+        molecule = None,
+        sum = True,
+        diff = True,
+        dvg = False,
+        dve = False,
+        fermionic_swaps = False,
+        n = None,
+        source_ops = None,
+        n_occ: int = None
+    ):
+        self._n_occ = n_occ
+        super().__init__(molecule, sum, diff, dvg, dve, fermionic_swaps, n, source_ops)
+        assert self._n_occ <= self.n, f"n_occ must be smaller than {self.n}"
+
+    @property
+    def n_occ(self):
+        return self._n_occ
+
+    def create_doubles(self):
+        """
+        Create one-body CEOs.
+        """
+
+        for p in range(self._n_occ, self.n):
+
+            for q in range(p + 1, self.n):
+
+                for r in range(0, self._n_occ):
+
+                    for s in range(r + 1, self._n_occ):
+
+                        if (p + q + r + s) % 2 != 0:
+                            continue
+
+                        if self.track_parents:
+                            parents = self.parent_pool.get_ops_on_qubits([p, q, r, s])
+                        else:
+                            parents = None
+
+                        q_operators, orbs = create_excitations(p, q, r, s, fermionic=self.fermionic_swaps)
+
+                        for (q_operator_1, q_operator_2), (source_orbs, target_orbs) in zip(q_operators, orbs):
+
+                            if self.sum:
+                                self.add_operator(q_operator_1 + q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                                  parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
+                                                  ceo_type="sum")
+                            if self.diff:
+                                self.add_operator(q_operator_1 - q_operator_2, cnots=9, cnot_depth=7, lnn_cnots=25,
+                                                  parents=parents, source_orbs=source_orbs, target_orbs=target_orbs,
+                                                  ceo_type="diff")
