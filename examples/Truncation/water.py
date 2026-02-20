@@ -65,7 +65,7 @@ print("Sizes of pools:")
 print(len(ceo_pool.operators), len(paired_pool.operators))
 
 print("Times for regular CEO pool:")
-print(f"Building pool: {elapsed_time_ceo_pool:5.4e}\nRun: {elapsed_time_paired_adapt:5.4e}")
+print(f"Building pool: {elapsed_time_ceo_pool:5.4e}\nRun: {elapsed_time_ceo_adapt:5.4e}")
 print("Times for paired CEO pool:")
 print(f"Building pool: {elapsed_time_paired_pool:5.4e}\nRun: {elapsed_time_paired_adapt:5.4e}")
 
