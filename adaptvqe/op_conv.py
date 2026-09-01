@@ -133,8 +133,17 @@ def to_qiskit_term(of_term, n, switch_endianness):
             else:
                 qiskit_op = new_ops ^ qiskit_op
         else:
-            new_ops = (I ^ id_count) ^ to_qiskit_pauli(pauli)
-            qiskit_op = qiskit_op ^ new_ops
+            if id_count > 0:
+                # new_ops = (I ** id_count) ^ to_qiskit_pauli(pauli)
+                new_ops = to_qiskit_pauli(pauli)
+                for _ in range(id_count):
+                    new_ops =  I ^ new_ops
+            else:
+                new_ops = to_qiskit_pauli(pauli)
+            if qiskit_op is None:
+                qiskit_op = new_ops
+            else:
+                qiskit_op = qiskit_op ^ new_ops
 
         previous_index = qubit_index
 
